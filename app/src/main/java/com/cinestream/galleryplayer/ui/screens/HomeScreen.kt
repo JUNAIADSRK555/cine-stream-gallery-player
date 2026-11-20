@@ -5,27 +5,30 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Stream
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.cinestream.galleryplayer.model.DrmType
 import com.cinestream.galleryplayer.model.StreamConfig
 import com.cinestream.galleryplayer.model.StreamFormat
-import com.cinestream.galleryplayer.ui.components.CineDropdown
-import com.cinestream.galleryplayer.ui.components.CineTextField
+import com.cinestream.galleryplayer.ui.components.CineDropdownSelector
+import com.cinestream.galleryplayer.ui.components.CineInputField
 import com.cinestream.galleryplayer.ui.components.tvFocusable
 import com.cinestream.galleryplayer.ui.theme.*
 
@@ -39,226 +42,158 @@ fun HomeScreen(
     val scrollState = rememberScrollState()
 
     var streamUrl by remember { mutableStateOf("") }
-    var streamTitle by remember { mutableStateOf("") }
     var cookie by remember { mutableStateOf("") }
     var referer by remember { mutableStateOf("") }
     var origin by remember { mutableStateOf("") }
     var drmLicenseUrl by remember { mutableStateOf("") }
-    var selectedFormat by remember { mutableStateOf(StreamFormat.AUTO) }
-    var selectedDrmType by remember { mutableStateOf(DrmType.NONE) }
 
-    Column(
+    var selectedFormat by remember { mutableStateOf(StreamFormat.AUTO) }
+    var selectedDrmType by remember { mutableStateOf(DrmType.CLEARKEY) }
+    var showSamplesDialog by remember { mutableStateOf(false) }
+
+    Box(
         modifier = modifier
             .fillMaxSize()
             .background(NavyBackground)
-            .verticalScroll(scrollState)
-            .padding(horizontal = 24.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Header Section
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(horizontal = 20.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Column {
+            // Section Title: "Cine Network Stream" + [📋 Paste] + [★ Favorites]
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = "Stream Player",
-                    fontSize = 24.sp,
+                    text = "Cine Network Stream",
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary
                 )
-                Text(
-                    text = "Enter any HLS, DASH, MP4 stream with custom headers & DRM",
-                    fontSize = 13.sp,
-                    color = TextSecondary
-                )
-            }
-
-            // Quick Paste Button
-            Button(
-                onClick = {
-                    val clip = clipboardManager.getText()?.text
-                    if (!clip.isNullOrBlank()) {
-                        streamUrl = clip.trim()
-                        Toast.makeText(context, "URL pasted from clipboard", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = NavyCard),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.tvFocusable(shape = RoundedCornerShape(8.dp))
-            ) {
-                Text("Paste URL", color = CyanAccent, fontSize = 12.sp)
-            }
-        }
-
-        // Stream URL Card
-        Card(
-            colors = CardDefaults.cardColors(containerColor = NavySurface),
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "STREAM SOURCE",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = CyanAccent,
-                    letterSpacing = 1.sp
-                )
-
-                CineTextField(
-                    value = streamUrl,
-                    onValueChange = { streamUrl = it },
-                    label = "Stream URL (m3u8, mpd, mp4, etc.) *",
-                    placeholder = "https://example.com/live/master.m3u8"
-                )
-
-                CineTextField(
-                    value = streamTitle,
-                    onValueChange = { streamTitle = it },
-                    label = "Stream Title (Optional)",
-                    placeholder = "My Custom Stream"
-                )
-            }
-        }
-
-        // Format & DRM Selection Row
-        Card(
-            colors = CardDefaults.cardColors(containerColor = NavySurface),
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "STREAM FORMAT & SECURITY",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = CyanAccent,
-                    letterSpacing = 1.sp
-                )
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    CineDropdown(
-                        items = StreamFormat.entries,
-                        selectedItem = selectedFormat,
-                        onItemSelected = { selectedFormat = it },
-                        label = "Format Override",
-                        getItemLabel = { it.displayName },
-                        modifier = Modifier.weight(1f)
+                    // Clipboard Paste Icon
+                    Icon(
+                        imageVector = Icons.Default.ContentPaste,
+                        contentDescription = "Paste Clipboard",
+                        tint = CyanAccent,
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clickable {
+                                val clip = clipboardManager.getText()?.text
+                                if (!clip.isNullOrBlank()) {
+                                    streamUrl = clip.trim()
+                                    Toast.makeText(context, "URL pasted from clipboard", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Clipboard empty", Toast.LENGTH_SHORT).show()
+                                }
+                            }
                     )
 
-                    CineDropdown(
-                        items = DrmType.entries,
-                        selectedItem = selectedDrmType,
-                        onItemSelected = { selectedDrmType = it },
-                        label = "DRM Scheme",
-                        getItemLabel = { it.displayName },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                if (selectedDrmType != DrmType.NONE) {
-                    CineTextField(
-                        value = drmLicenseUrl,
-                        onValueChange = { drmLicenseUrl = it },
-                        label = "${selectedDrmType.displayName} License Server URL",
-                        placeholder = "https://license.example.com/acquire"
+                    // Star Icon (Opens Sample Streams Modal)
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = "Samples / Favorites",
+                        tint = CyanAccent,
+                        modifier = Modifier
+                            .size(26.dp)
+                            .clickable { showSamplesDialog = true }
                     )
                 }
             }
-        }
 
-        // HTTP Headers Card
-        Card(
-            colors = CardDefaults.cardColors(containerColor = NavySurface),
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            Spacer(modifier = Modifier.height(2.dp))
+
+            // 1. Stream Url
+            CineInputField(
+                value = streamUrl,
+                onValueChange = { streamUrl = it },
+                placeholder = "Stream Url"
+            )
+
+            // 2. Cookie
+            CineInputField(
+                value = cookie,
+                onValueChange = { cookie = it },
+                placeholder = "Cookie"
+            )
+
+            // 3. Referer
+            CineInputField(
+                value = referer,
+                onValueChange = { referer = it },
+                placeholder = "Referer"
+            )
+
+            // 4. Origin
+            CineInputField(
+                value = origin,
+                onValueChange = { origin = it },
+                placeholder = "Origin"
+            )
+
+            // 5. Drm License
+            CineInputField(
+                value = drmLicenseUrl,
+                onValueChange = { drmLicenseUrl = it },
+                placeholder = "Drm License"
+            )
+
+            // Side-by-side Dropdown Selectors matching screenshot: [ Default ▼ ] [ ClearKey ▼ ]
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = "CUSTOM HTTP HEADERS",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = CyanAccent,
-                    letterSpacing = 1.sp
+                // Format Selector: Default, HLS, DASH, SmoothStreaming, Progressive
+                CineDropdownSelector(
+                    items = StreamFormat.entries,
+                    selectedItem = selectedFormat,
+                    onItemSelected = { selectedFormat = it },
+                    getItemLabel = { if (it == StreamFormat.AUTO) "Default" else it.displayName.substringBefore(" ") },
+                    modifier = Modifier.weight(1f)
                 )
 
-                CineTextField(
-                    value = cookie,
-                    onValueChange = { cookie = it },
-                    label = "Cookie",
-                    placeholder = "session_id=abc123xyz; token=eyJ..."
-                )
-
-                CineTextField(
-                    value = referer,
-                    onValueChange = { referer = it },
-                    label = "Referer",
-                    placeholder = "https://example.com"
-                )
-
-                CineTextField(
-                    value = origin,
-                    onValueChange = { origin = it },
-                    label = "Origin",
-                    placeholder = "https://example.com"
+                // DRM Selector: None, ClearKey, Widevine, PlayReady
+                CineDropdownSelector(
+                    items = listOf(DrmType.CLEARKEY, DrmType.WIDEVINE, DrmType.PLAYREADY, DrmType.NONE),
+                    selectedItem = selectedDrmType,
+                    onItemSelected = { selectedDrmType = it },
+                    getItemLabel = { if (it == DrmType.NONE) "None" else it.displayName },
+                    modifier = Modifier.weight(1f)
                 )
             }
+
+            Spacer(modifier = Modifier.height(80.dp)) // Padding for FAB
         }
 
-        // Big Cyan Play Button
+        // Floating Action Button (FAB) matching the screenshot:
+        // Large Bright Cyan circle with white play arrow in bottom-right corner!
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(CyanAccent, CyanDark)
-                    )
-                )
-                .tvFocusable(
-                    shape = RoundedCornerShape(12.dp),
-                    onClick = {
-                        if (streamUrl.isNotBlank()) {
-                            onPlayStream(
-                                StreamConfig(
-                                    url = streamUrl.trim(),
-                                    title = streamTitle.ifBlank { "Custom Stream" },
-                                    cookie = cookie,
-                                    referer = referer,
-                                    origin = origin,
-                                    drmLicenseUrl = drmLicenseUrl,
-                                    drmType = selectedDrmType,
-                                    format = selectedFormat
-                                )
-                            )
-                        } else {
-                            Toast.makeText(context, "Please enter a stream URL", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                )
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp, bottom = 20.dp)
+                .size(64.dp)
+                .clip(CircleShape)
+                .background(CyanAccent)
+                .tvFocusable(shape = CircleShape)
                 .clickable {
                     if (streamUrl.isNotBlank()) {
                         onPlayStream(
                             StreamConfig(
                                 url = streamUrl.trim(),
-                                title = streamTitle.ifBlank { "Custom Stream" },
+                                title = "Cine Stream",
                                 cookie = cookie,
                                 referer = referer,
                                 origin = origin,
@@ -268,102 +203,90 @@ fun HomeScreen(
                             )
                         )
                     } else {
-                        Toast.makeText(context, "Please enter a stream URL", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Please enter a Stream Url", Toast.LENGTH_SHORT).show()
                     }
                 },
             contentAlignment = Alignment.Center
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "Play",
-                    tint = NavyBackground,
-                    modifier = Modifier.size(28.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "PLAY STREAM",
-                    color = NavyBackground,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                )
+            Icon(
+                imageVector = Icons.Default.PlayArrow,
+                contentDescription = "Play Stream",
+                tint = Color.White,
+                modifier = Modifier.size(34.dp)
+            )
+        }
+    }
+
+    // Samples / Favorites Dialog when clicking ★ icon
+    if (showSamplesDialog) {
+        SamplesDialog(
+            onDismiss = { showSamplesDialog = false },
+            onSelectSample = { sampleUrl, format, drm, drmUrl, title ->
+                streamUrl = sampleUrl
+                selectedFormat = format
+                selectedDrmType = drm
+                drmLicenseUrl = drmUrl
+                showSamplesDialog = false
+                Toast.makeText(context, "Loaded $title", Toast.LENGTH_SHORT).show()
             }
-        }
-
-        // Quick Presets for Instant Testing
-        Text(
-            text = "QUICK TEST PRESETS",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = TextSecondary,
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(top = 8.dp)
         )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            PresetChip(
-                name = "Big Buck Bunny (MP4)",
-                modifier = Modifier.weight(1f),
-                onClick = {
-                    streamUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-                    streamTitle = "Big Buck Bunny"
-                    selectedFormat = StreamFormat.PROGRESSIVE
-                    selectedDrmType = DrmType.NONE
-                }
-            )
-            PresetChip(
-                name = "Sintel (HLS)",
-                modifier = Modifier.weight(1f),
-                onClick = {
-                    streamUrl = "https://bitmovin-a.akamaihd.net/content/sintel/hls/playlist.m3u8"
-                    streamTitle = "Sintel HLS"
-                    selectedFormat = StreamFormat.HLS
-                    selectedDrmType = DrmType.NONE
-                }
-            )
-            PresetChip(
-                name = "Tears of Steel (DASH)",
-                modifier = Modifier.weight(1f),
-                onClick = {
-                    streamUrl = "https://dash.akamaized.net/akamai/test/caption_test/ElephantsDream/elephants_dream_480p_heaac5_1.mpd"
-                    streamTitle = "Elephants Dream DASH"
-                    selectedFormat = StreamFormat.DASH
-                    selectedDrmType = DrmType.NONE
-                }
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
 @Composable
-private fun PresetChip(
-    name: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+private fun SamplesDialog(
+    onDismiss: () -> Unit,
+    onSelectSample: (String, StreamFormat, DrmType, String, String) -> Unit
 ) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(NavyCard)
-            .tvFocusable(shape = RoundedCornerShape(8.dp), onClick = onClick)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 10.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = name,
-            color = CyanAccent,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1
-        )
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = NavySurface),
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Sample Streams",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+
+                val samples = listOf(
+                    Triple("Clear DASH (Big Buck Bunny)", "https://dash.akamaized.net/dash264/TestCases/1c/qualcomm/1/MultiRate.mpd", StreamFormat.DASH),
+                    Triple("HLS Stream (Sintel)", "https://bitmovin-a.akamaihd.net/content/sintel/hls/playlist.m3u8", StreamFormat.HLS),
+                    Triple("Progressive MP4", "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", StreamFormat.PROGRESSIVE),
+                    Triple("Tears of Steel (DASH)", "https://dash.akamaized.net/akamai/test/caption_test/ElephantsDream/elephants_dream_480p_heaac5_1.mpd", StreamFormat.DASH)
+                )
+
+                samples.forEach { (name, url, format) ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(NavyCard)
+                            .tvFocusable(shape = RoundedCornerShape(10.dp))
+                            .clickable {
+                                onSelectSample(url, format, DrmType.NONE, "", name)
+                            }
+                            .padding(14.dp)
+                    ) {
+                        Text(text = name, color = CyanAccent, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Close", color = TextSecondary)
+                    }
+                }
+            }
+        }
     }
 }
