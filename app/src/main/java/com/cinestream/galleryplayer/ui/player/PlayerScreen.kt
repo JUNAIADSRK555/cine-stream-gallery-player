@@ -140,6 +140,8 @@ fun PlayerScreen(
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showQualityDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
+    var showStreamSettingsDialog by remember { mutableStateOf(false) }
+    var streamSettingsSelectedTab by remember { mutableIntStateOf(0) }
     var isFullscreenLandscape by remember { mutableStateOf(false) }
     var trackSelectionVersion by remember { mutableIntStateOf(0) }
 
@@ -630,19 +632,63 @@ fun PlayerScreen(
                         )
                     }
 
-                    // [ 🔒 ] Screen Lock Icon
-                    Icon(
-                        imageVector = Icons.Default.LockOpen,
-                        contentDescription = "Lock Screen",
-                        tint = Color.White,
-                        modifier = Modifier
-                            .size(26.dp)
-                            .clickable {
-                                isScreenLocked = true
-                                showControls = false
-                                Toast.makeText(context, "Screen Locked (Tap lock icon to unlock)", Toast.LENGTH_SHORT).show()
-                            }
-                    )
+                    // Right items: [ HD ] [ AUDIO ] [ 🔒 ]
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // [ HD ] Quality Quick Badge
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(NavySurface.copy(alpha = 0.85f))
+                                .clickable {
+                                    streamSettingsSelectedTab = 0
+                                    showStreamSettingsDialog = true
+                                }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "HD",
+                                color = CyanAccent,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // [ AUDIO ] Language Quick Badge
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(NavySurface.copy(alpha = 0.85f))
+                                .clickable {
+                                    streamSettingsSelectedTab = 1
+                                    showStreamSettingsDialog = true
+                                }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Translate,
+                                contentDescription = "Audio Language",
+                                tint = CyanAccent,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+
+                        // [ 🔒 ] Screen Lock Icon
+                        Icon(
+                            imageVector = Icons.Default.LockOpen,
+                            contentDescription = "Lock Screen",
+                            tint = Color.White,
+                            modifier = Modifier
+                                .size(26.dp)
+                                .clickable {
+                                    isScreenLocked = true
+                                    showControls = false
+                                    Toast.makeText(context, "Screen Locked (Tap lock icon to unlock)", Toast.LENGTH_SHORT).show()
+                                }
+                        )
+                    }
                 }
 
                 // Center Play / Pause Toggler
@@ -730,113 +776,45 @@ fun PlayerScreen(
                             )
                         }
 
-                        // Right Action Buttons Row matching Photo 5 & 6 + Quality & Language:
+                        // Right Action Buttons Row matching Photo 2:
+                        // [ 🔊 ]  [ 🎦⚙ ]  [ 🗖 ]  [ ⛶ ]  [ › ]
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            // 1. [ 🔊 / 🔇 ] Volume / Mute
+                            // 1. [ 🔊 / 🔇 ] Volume / Mute (Photo 2)
                             Icon(
                                 imageVector = if (isMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
                                 contentDescription = "Audio / Mute",
                                 tint = Color.White,
                                 modifier = Modifier
-                                    .size(22.dp)
+                                    .size(24.dp)
                                     .clickable {
                                         isMuted = !isMuted
                                         exoPlayer.volume = if (isMuted) 0f else 1f
                                     }
                             )
 
-                            // 2. [ ⚙ Quality ] Video Quality Button (User request: qulaty butoon)
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(TealButtonBg)
-                                    .clickable { showQualityDialog = true }
-                                    .padding(horizontal = 7.dp, vertical = 3.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.HighQuality,
-                                        contentDescription = "Quality",
-                                        tint = CyanAccent,
-                                        modifier = Modifier.size(17.dp)
-                                    )
-                                    Text(
-                                        text = "Quality",
-                                        color = Color.White,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-
-                            // 3. [ 🌐 Lang ] Audio Language Button (User request: lanuge button)
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(TealButtonBg)
-                                    .clickable { showLanguageDialog = true }
-                                    .padding(horizontal = 7.dp, vertical = 3.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Translate,
-                                        contentDescription = "Language",
-                                        tint = CyanAccent,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(
-                                        text = "Lang",
-                                        color = Color.White,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-
-                            // 4. [ Fit ] Aspect Ratio Toggle Text Button (Photo 6)
-                            Text(
-                                text = currentResizeMode.displayName,
-                                color = Color.White,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier
-                                    .clickable {
-                                        val modes = PlayerResizeMode.entries
-                                        val nextIdx = (modes.indexOf(currentResizeMode) + 1) % modes.size
-                                        currentResizeMode = modes[nextIdx]
-                                    }
-                            )
-
-                            // 5. [ CC ] Subtitles / Captions (Photo 6)
+                            // 2. [ 🎦⚙ ] Video & Stream Settings (Photo 2 - Quality, Language, Speed, Aspect)
                             Icon(
-                                imageVector = Icons.Default.ClosedCaption,
-                                contentDescription = "Closed Captions",
-                                tint = Color.White,
+                                imageVector = Icons.Default.VideoSettings,
+                                contentDescription = "Video Settings",
+                                tint = CyanAccent,
                                 modifier = Modifier
-                                    .size(20.dp)
+                                    .size(24.dp)
                                     .clickable {
-                                        Toast.makeText(context, "Captions / Subtitles Active", Toast.LENGTH_SHORT).show()
+                                        streamSettingsSelectedTab = 0
+                                        showStreamSettingsDialog = true
                                     }
                             )
 
-                            // 6. [ 🗖 ] Picture in Picture (PiP) (Photo 5)
+                            // 3. [ 🗖 ] Picture in Picture (Photo 2)
                             Icon(
                                 imageVector = Icons.Default.PictureInPictureAlt,
                                 contentDescription = "Picture in Picture",
                                 tint = Color.White,
                                 modifier = Modifier
-                                    .size(20.dp)
+                                    .size(22.dp)
                                     .clickable {
                                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity != null) {
                                             try {
@@ -849,23 +827,13 @@ fun PlayerScreen(
                                     }
                             )
 
-                            // 7. [ ⚙ ] Speed Settings (Photo 6)
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "Playback Speed",
-                                tint = Color.White,
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .clickable { showSpeedDialog = true }
-                            )
-
-                            // 8. [ ⛶ ] Fullscreen / Rotate Screen (Photo 5)
+                            // 4. [ ⛶ ] Fullscreen / Rotate Screen (Photo 2)
                             Icon(
                                 imageVector = Icons.Default.Fullscreen,
                                 contentDescription = "Rotate",
                                 tint = Color.White,
                                 modifier = Modifier
-                                    .size(22.dp)
+                                    .size(24.dp)
                                     .clickable {
                                         isFullscreenLandscape = !isFullscreenLandscape
                                         activity?.requestedOrientation = if (isFullscreenLandscape) {
@@ -875,62 +843,18 @@ fun PlayerScreen(
                                         }
                                     }
                             )
-                        }
-                    }
-                }
-            }
-        }
-    }
 
-    // Playback Speed Dialog
-    if (showSpeedDialog) {
-        Dialog(onDismissRequest = { showSpeedDialog = false }) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = NavySurface),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth(0.85f)
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = "Playback Speed",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-
-                    val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
-                    speeds.forEach { speed ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (playbackSpeed == speed) TealPill else NavyCard)
-                                .clickable {
-                                    playbackSpeed = speed
-                                    exoPlayer.playbackParameters = PlaybackParameters(speed)
-                                    showSpeedDialog = false
-                                }
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "${speed}x",
-                                color = if (playbackSpeed == speed) CyanAccent else TextPrimary,
-                                fontSize = 14.sp,
-                                fontWeight = if (playbackSpeed == speed) FontWeight.Bold else FontWeight.Normal
+                            // 5. [ › ] Quick Actions Menu (Photo 2)
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowRight,
+                                contentDescription = "More",
+                                tint = Color.White,
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clickable {
+                                        showStreamSettingsDialog = true
+                                    }
                             )
-                            if (playbackSpeed == speed) {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = "Selected",
-                                    tint = CyanAccent,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
                         }
                     }
                 }
@@ -938,171 +862,299 @@ fun PlayerScreen(
         }
     }
 
-    // Video Quality Selection Dialog (User request: qulaty butoon)
-    if (showQualityDialog) {
-        Dialog(onDismissRequest = { showQualityDialog = false }) {
+    // Comprehensive Stream & Video Controls Dialog (Quality, Audio Language, Speed, Aspect Ratio)
+    if (showStreamSettingsDialog) {
+        Dialog(onDismissRequest = { showStreamSettingsDialog = false }) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = NavySurface),
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(20.dp),
                 modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .padding(vertical = 16.dp)
+                    .fillMaxWidth(0.92f)
+                    .padding(vertical = 12.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
+                    // Header: Title + Close Icon
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VideoSettings,
+                                contentDescription = null,
+                                tint = CyanAccent,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Text(
+                                text = "Stream & Video Controls",
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                        }
                         Icon(
-                            imageVector = Icons.Default.HighQuality,
-                            contentDescription = "Quality",
-                            tint = CyanAccent,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Text(
-                            text = "Select Video Quality",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = TextSecondary,
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clickable { showStreamSettingsDialog = false }
                         )
                     }
 
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.heightIn(max = 350.dp)
+                    // 4 Clean Filter Chips / Tabs: [ Quality ] [ Audio ] [ Speed ] [ Aspect ]
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        items(videoOptions) { option ->
-                            Row(
+                        listOf("Quality", "Audio", "Speed", "Aspect").forEachIndexed { index, tabName ->
+                            val isSelected = streamSettingsSelectedTab == index
+                            Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
+                                    .weight(1f)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(if (option.isSelected) TealPill else NavyCard)
-                                    .clickable {
-                                        if (option.isAuto) {
-                                            exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
-                                                .buildUpon()
-                                                .clearVideoSizeConstraints()
-                                                .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
-                                                .build()
-                                            Toast.makeText(context, "Quality: Auto (Adaptive)", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
-                                                .buildUpon()
-                                                .setMaxVideoSize(option.width.coerceAtLeast(1), option.height.coerceAtLeast(1))
-                                                .setMinVideoSize(option.width.coerceAtLeast(1), option.height.coerceAtLeast(1))
-                                                .build()
-                                            Toast.makeText(context, "Quality: ${option.label}", Toast.LENGTH_SHORT).show()
-                                        }
-                                        trackSelectionVersion++
-                                        showQualityDialog = false
-                                    }
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                    .background(if (isSelected) CyanAccent else NavyCard)
+                                    .clickable { streamSettingsSelectedTab = index }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = option.label,
-                                    color = if (option.isSelected) CyanAccent else TextPrimary,
-                                    fontSize = 15.sp,
-                                    fontWeight = if (option.isSelected) FontWeight.Bold else FontWeight.Normal
+                                    text = tabName,
+                                    color = if (isSelected) NavyBackground else TextSecondary,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                                 )
-                                if (option.isSelected) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = "Selected",
-                                        tint = CyanAccent,
-                                        modifier = Modifier.size(20.dp)
-                                    )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = NavyBorder, thickness = 1.dp)
+
+                    // Tab Content
+                    when (streamSettingsSelectedTab) {
+                        0 -> {
+                            // QUALITY TAB
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "Select Resolution",
+                                    fontSize = 13.sp,
+                                    color = TextSecondary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                LazyColumn(
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.heightIn(max = 260.dp)
+                                ) {
+                                    items(videoOptions) { option ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(if (option.isSelected) TealPill else NavyCard)
+                                                .clickable {
+                                                    if (option.isAuto) {
+                                                        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                                                            .buildUpon()
+                                                            .clearVideoSizeConstraints()
+                                                            .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                                                            .build()
+                                                        Toast.makeText(context, "Quality: Auto (Adaptive)", Toast.LENGTH_SHORT).show()
+                                                    } else {
+                                                        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                                                            .buildUpon()
+                                                            .setMaxVideoSize(option.width.coerceAtLeast(1), option.height.coerceAtLeast(1))
+                                                            .setMinVideoSize(option.width.coerceAtLeast(1), option.height.coerceAtLeast(1))
+                                                            .build()
+                                                        Toast.makeText(context, "Quality: ${option.label}", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                    trackSelectionVersion++
+                                                    showStreamSettingsDialog = false
+                                                }
+                                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = option.label,
+                                                color = if (option.isSelected) CyanAccent else TextPrimary,
+                                                fontSize = 14.sp,
+                                                fontWeight = if (option.isSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                            if (option.isSelected) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = "Selected",
+                                                    tint = CyanAccent,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
-                }
-            }
-        }
-    }
-
-    // Audio Language Selection Dialog (User request: lanuge button)
-    if (showLanguageDialog) {
-        Dialog(onDismissRequest = { showLanguageDialog = false }) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = NavySurface),
-                shape = RoundedCornerShape(18.dp),
-                modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .padding(vertical = 16.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Translate,
-                            contentDescription = "Language",
-                            tint = CyanAccent,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Text(
-                            text = "Select Audio Language",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                    }
-
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.heightIn(max = 350.dp)
-                    ) {
-                        items(audioOptions) { option ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (option.isSelected) TealPill else NavyCard)
-                                    .clickable {
-                                        val group = exoPlayer.currentTracks.groups.getOrNull(option.groupIndex)
-                                        if (group != null) {
-                                            val override = TrackSelectionOverride(group.mediaTrackGroup, option.trackIndex)
-                                            exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
-                                                .buildUpon()
-                                                .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
-                                                .addOverride(override)
-                                                .apply {
-                                                    if (option.language != "und" && option.language != "default") {
-                                                        setPreferredAudioLanguage(option.language)
-                                                    }
-                                                }
-                                                .build()
-                                        }
-                                        trackSelectionVersion++
-                                        showLanguageDialog = false
-                                        Toast.makeText(context, "Audio: ${option.label}", Toast.LENGTH_SHORT).show()
-                                    }
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                        1 -> {
+                            // AUDIO TAB
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(
-                                    text = option.label,
-                                    color = if (option.isSelected) CyanAccent else TextPrimary,
-                                    fontSize = 15.sp,
-                                    fontWeight = if (option.isSelected) FontWeight.Bold else FontWeight.Normal
+                                    text = "Select Audio Track",
+                                    fontSize = 13.sp,
+                                    color = TextSecondary,
+                                    fontWeight = FontWeight.SemiBold
                                 )
-                                if (option.isSelected) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = "Selected",
-                                        tint = CyanAccent,
-                                        modifier = Modifier.size(20.dp)
-                                    )
+                                LazyColumn(
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.heightIn(max = 260.dp)
+                                ) {
+                                    items(audioOptions) { option ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(if (option.isSelected) TealPill else NavyCard)
+                                                .clickable {
+                                                    val group = exoPlayer.currentTracks.groups.getOrNull(option.groupIndex)
+                                                    if (group != null) {
+                                                        val override = TrackSelectionOverride(group.mediaTrackGroup, option.trackIndex)
+                                                        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                                                            .buildUpon()
+                                                            .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+                                                            .addOverride(override)
+                                                            .apply {
+                                                                if (option.language != "und" && option.language != "default") {
+                                                                    setPreferredAudioLanguage(option.language)
+                                                                }
+                                                            }
+                                                            .build()
+                                                    }
+                                                    trackSelectionVersion++
+                                                    showStreamSettingsDialog = false
+                                                    Toast.makeText(context, "Audio: ${option.label}", Toast.LENGTH_SHORT).show()
+                                                }
+                                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = option.label,
+                                                color = if (option.isSelected) CyanAccent else TextPrimary,
+                                                fontSize = 14.sp,
+                                                fontWeight = if (option.isSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                            if (option.isSelected) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = "Selected",
+                                                    tint = CyanAccent,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        2 -> {
+                            // SPEED TAB
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "Playback Speed",
+                                    fontSize = 13.sp,
+                                    color = TextSecondary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+                                LazyColumn(
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.heightIn(max = 260.dp)
+                                ) {
+                                    items(speeds) { speed ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(if (playbackSpeed == speed) TealPill else NavyCard)
+                                                .clickable {
+                                                    playbackSpeed = speed
+                                                    exoPlayer.playbackParameters = PlaybackParameters(speed)
+                                                    showStreamSettingsDialog = false
+                                                    Toast.makeText(context, "Speed: ${speed}x", Toast.LENGTH_SHORT).show()
+                                                }
+                                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = if (speed == 1.0f) "1.0x (Normal)" else "${speed}x",
+                                                color = if (playbackSpeed == speed) CyanAccent else TextPrimary,
+                                                fontSize = 14.sp,
+                                                fontWeight = if (playbackSpeed == speed) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                            if (playbackSpeed == speed) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = "Selected",
+                                                    tint = CyanAccent,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        3 -> {
+                            // ASPECT RATIO TAB
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "Screen Aspect Ratio",
+                                    fontSize = 13.sp,
+                                    color = TextSecondary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                LazyColumn(
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.heightIn(max = 260.dp)
+                                ) {
+                                    items(PlayerResizeMode.entries) { mode ->
+                                        val isSelected = currentResizeMode == mode
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(if (isSelected) TealPill else NavyCard)
+                                                .clickable {
+                                                    currentResizeMode = mode
+                                                    showStreamSettingsDialog = false
+                                                    Toast.makeText(context, "Aspect: ${mode.displayName}", Toast.LENGTH_SHORT).show()
+                                                }
+                                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = mode.displayName,
+                                                color = if (isSelected) CyanAccent else TextPrimary,
+                                                fontSize = 14.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                            if (isSelected) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = "Selected",
+                                                    tint = CyanAccent,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }

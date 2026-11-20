@@ -54,14 +54,14 @@ fun CineTopBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Left: Hamburger Menu + Cine Player Title
+            // Left: Hamburger Menu + 3D Logo + JD Video Player HD
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Hamburger Button [≡]
                 Box(
@@ -81,86 +81,29 @@ fun CineTopBar(
                     )
                 }
 
-                // Logo + Title: "JD Video Player HD"
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    androidx.compose.foundation.Image(
-                        painter = androidx.compose.ui.res.painterResource(id = com.cinestream.galleryplayer.R.drawable.app_logo),
-                        contentDescription = "JD Logo",
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "JD ",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = CyanAccent
-                        )
-                        Text(
-                            text = "Video Player HD",
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                    }
-                }
-            }
-
-            // Right: Share/Send + "Ads Free" Gold Pill
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // Circular Send Button
-                Box(
+                // 3D Neon Logo
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(id = com.cinestream.galleryplayer.R.drawable.app_logo),
+                    contentDescription = "JD Logo",
                     modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(TealIconBg)
-                        .tvFocusable(shape = CircleShape, onClick = onShareClick)
-                        .clickable(onClick = onShareClick),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Send / Telegram",
-                        tint = CyanAccent,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                )
 
-                // Ads Free Gold Button
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(GoldBackground)
-                        .border(BorderStroke(1.2.dp, GoldBorder), RoundedCornerShape(20.dp))
-                        .tvFocusable(shape = RoundedCornerShape(20.dp), onClick = onAdsFreeClick)
-                        .clickable(onClick = onAdsFreeClick)
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Star,
-                            contentDescription = "Ads Free",
-                            tint = GoldText,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            text = "Ads Free",
-                            color = GoldText,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                // Title: "JD Video Player HD"
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "JD ",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = CyanAccent
+                    )
+                    Text(
+                        text = "Video Player HD",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
                 }
             }
         }

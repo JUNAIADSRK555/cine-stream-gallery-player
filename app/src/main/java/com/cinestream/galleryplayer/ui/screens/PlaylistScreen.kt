@@ -146,40 +146,42 @@ fun PlaylistScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Left: Title + Available Badge
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
                     text = "Playlists",
-                    fontSize = 24.sp,
+                    fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary
                 )
 
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(12.dp))
                         .background(TealPill)
-                        .padding(horizontal = 12.dp, vertical = 5.dp)
+                        .padding(horizontal = 9.dp, vertical = 4.dp)
                 ) {
                     Text(
                         text = "${playlists.size} Available",
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = CyanAccent
                     )
                 }
             }
 
+            // Right: Refresh & Add M3U
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Refresh Button [⟳]
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(38.dp)
                         .clip(CircleShape)
                         .background(TealIconBg)
                         .tvFocusable(shape = CircleShape)
@@ -206,25 +208,27 @@ fun PlaylistScreen(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "Refresh",
                         tint = CyanAccent,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 
-                // Cyan [ + Add M3U ] Button
+                // Cyan [ + Add M3U ] Button (Single-line, never wrapped)
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(10.dp))
                         .background(CyanAccent)
-                        .tvFocusable(shape = RoundedCornerShape(12.dp), onClick = { showAddDialog = true })
+                        .tvFocusable(shape = RoundedCornerShape(10.dp), onClick = { showAddDialog = true })
                         .clickable { showAddDialog = true }
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = "+ Add M3U",
                         color = NavyBackground,
                         fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }
