@@ -4,8 +4,10 @@ import android.app.Activity
 import android.app.PictureInPictureParams
 import android.content.Context
 import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
+import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -52,6 +54,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.drm.DefaultDrmSessionManager
 import androidx.media3.exoplayer.drm.ExoMediaDrm
@@ -367,7 +370,11 @@ fun PlayerScreen(
             mediaItemBuilder.setDrmConfiguration(drmConfigBuilder.build())
         }
 
-        val player = ExoPlayer.Builder(context)
+        val renderersFactory = DefaultRenderersFactory(context)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+            .setEnableDecoderFallback(true)
+
+        val player = ExoPlayer.Builder(context, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
             .build()
 
@@ -597,13 +604,16 @@ fun PlayerScreen(
                 }
             }
     ) {
-        // ExoPlayer View
+        // ExoPlayer View (TextureView surface without opaque shutter/background blocks)
         AndroidView(
             factory = { ctx ->
-                PlayerView(ctx).apply {
+                val view = LayoutInflater.from(ctx).inflate(com.cinestream.galleryplayer.R.layout.player_view, null) as PlayerView
+                view.apply {
                     this.player = exoPlayer
                     useController = false
                     resizeMode = currentResizeMode.modeInt
+                    setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    setKeepContentOnPlayerReset(true)
                     layoutParams = FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
@@ -1010,21 +1020,33 @@ fun PlayerScreen(
                             )
 
                             // 4. [ ⛶ ] Fullscreen / Rotate Screen (Photo 2)
-                            Icon(
-                                imageVector = Icons.Default.Fullscreen,
-                                contentDescription = "Rotate",
-                                tint = Color.White,
+                            val isCurrentLandscape = context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+                            Box(
                                 modifier = Modifier
-                                    .size(24.dp)
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .tvFocusable(shape = CircleShape)
                                     .clickable {
-                                        isFullscreenLandscape = !isFullscreenLandscape
-                                        activity?.requestedOrientation = if (isFullscreenLandscape) {
-                                            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                                        if (isCurrentLandscape) {
+                                            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                                         } else {
-                                            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                                            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                                         }
-                                    }
-                            )
+                                        if (window != null) {
+                                            val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+                                            insetsController.hide(WindowInsetsCompat.Type.systemBars())
+                                            insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (isCurrentLandscape) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                    contentDescription = if (isCurrentLandscape) "Exit Fullscreen" else "Enter Fullscreen",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
 
                             // 5. [ › ] Quick Actions Menu (Photo 2)
                             Icon(

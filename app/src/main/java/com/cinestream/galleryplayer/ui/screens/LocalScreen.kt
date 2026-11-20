@@ -4,12 +4,16 @@ import android.Manifest
 import android.content.ContentUris
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import android.util.LruCache
+import android.util.Size
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -26,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -34,9 +39,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import coil.ImageLoader
 import coil.compose.AsyncImage
+import coil.decode.VideoFrameDecoder
+import coil.disk.DiskCache
+import coil.memory.MemoryCache
 import coil.request.ImageRequest
-import coil.request.videoFrameMillis
+import coil.request.videoFramePercent
 import com.cinestream.galleryplayer.model.LocalVideoItem
 import com.cinestream.galleryplayer.model.StreamConfig
 import com.cinestream.galleryplayer.model.StreamFormat
@@ -66,6 +75,26 @@ fun LocalScreen(
 
     var localVideos by remember { mutableStateOf<List<LocalVideoItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
+
+    val videoImageLoader = remember(context) {
+        ImageLoader.Builder(context)
+            .components {
+                add(VideoFrameDecoder.Factory())
+            }
+            .crossfade(true)
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(context.cacheDir.resolve("video_thumbnails"))
+                    .maxSizeBytes(128L * 1024 * 1024)
+                    .build()
+            }
+            .memoryCache {
+                MemoryCache.Builder(context)
+                    .maxSizePercent(0.25)
+                    .build()
+            }
+            .build()
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -286,6 +315,7 @@ fun LocalScreen(
                         items(localVideos, key = { it.id }) { video ->
                             VideoItemCard(
                                 video = video,
+                                imageLoader = videoImageLoader,
                                 onClick = {
                                     onPlayVideo(
                                         StreamConfig(
@@ -304,13 +334,108 @@ fun LocalScreen(
     }
 }
 
+object VideoThumbnailCache {
+    private val maxMemory = (Runtime.getRuntime().maxMemory() / 1024).toInt()
+    private val cacheSize = (maxMemory / 8).coerceAtLeast(1024)
+
+    val memoryCache = object : LruCache<Long, Bitmap>(cacheSize) {
+        override fun sizeOf(key: Long, bitmap: Bitmap): Int {
+            return bitmap.byteCount / 1024
+        }
+    }
+}
+
+@Composable
+fun VideoThumbnail(
+    video: LocalVideoItem,
+    imageLoader: ImageLoader,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    var bitmap by remember(video.id) {
+        mutableStateOf(VideoThumbnailCache.memoryCache.get(video.id))
+    }
+
+    LaunchedEffect(video.id) {
+        if (bitmap == null) {
+            withContext(Dispatchers.IO) {
+                try {
+                    val loaded = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        context.contentResolver.loadThumbnail(
+                            video.contentUri,
+                            Size(360, 240),
+                            null
+                        )
+                    } else {
+                        @Suppress("DEPRECATION")
+                        MediaStore.Video.Thumbnails.getThumbnail(
+                            context.contentResolver,
+                            video.id,
+                            MediaStore.Video.Thumbnails.MINI_KIND,
+                            null
+                        ) ?: (if (video.path.isNotBlank()) {
+                            @Suppress("DEPRECATION")
+                            android.media.ThumbnailUtils.createVideoThumbnail(
+                                video.path,
+                                MediaStore.Images.Thumbnails.MINI_KIND
+                            )
+                        } else null)
+                    }
+                    if (loaded != null) {
+                        VideoThumbnailCache.memoryCache.put(video.id, loaded)
+                        withContext(Dispatchers.Main) {
+                            bitmap = loaded
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Ignored - fallback to Coil
+                }
+            }
+        }
+    }
+
+    Box(
+        modifier = modifier.background(NavySurface),
+        contentAlignment = Alignment.Center
+    ) {
+        // Placeholder / error icon while loading
+        Icon(
+            imageVector = Icons.Default.SmartDisplay,
+            contentDescription = null,
+            tint = CyanAccent.copy(alpha = 0.3f),
+            modifier = Modifier.size(36.dp)
+        )
+
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap!!.asImageBitmap(),
+                contentDescription = video.displayName,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            // High performance video frame extraction with disk/memory caching via Coil
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(if (video.path.isNotBlank()) video.path else video.contentUri)
+                    .videoFramePercent(0.1)
+                    .crossfade(true)
+                    .build(),
+                imageLoader = imageLoader,
+                contentDescription = video.displayName,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+    }
+}
+
 @Composable
 private fun VideoItemCard(
     video: LocalVideoItem,
+    imageLoader: ImageLoader,
     onClick: () -> Unit
 ) {
-    val context = LocalContext.current
-
     Card(
         colors = CardDefaults.cardColors(containerColor = NavyCard),
         shape = RoundedCornerShape(12.dp),
@@ -325,16 +450,10 @@ private fun VideoItemCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(105.dp)
-                    .background(NavySurface)
             ) {
-                AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(video.contentUri)
-                        .videoFrameMillis(2000)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = video.displayName,
-                    contentScale = ContentScale.Crop,
+                VideoThumbnail(
+                    video = video,
+                    imageLoader = imageLoader,
                     modifier = Modifier.fillMaxSize()
                 )
 
