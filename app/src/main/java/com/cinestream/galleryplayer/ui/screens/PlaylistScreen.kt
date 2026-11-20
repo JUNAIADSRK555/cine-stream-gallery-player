@@ -445,25 +445,19 @@ fun PlaylistScreen(
                             .tvFocusable(
                                 shape = RoundedCornerShape(12.dp),
                                 onClick = {
-                                    onPlayChannel(
-                                        StreamConfig(
-                                            url = channel.streamUrl,
-                                            title = channel.name,
-                                            format = StreamFormat.AUTO,
-                                            extraHeaders = channel.headers
-                                        )
+                                    val parsed = StreamConfig.parse(channel.streamUrl, channel.name)
+                                    val finalConfig = parsed.copy(
+                                        extraHeaders = channel.headers + parsed.extraHeaders
                                     )
+                                    onPlayChannel(finalConfig)
                                 }
                             )
                             .clickable {
-                                onPlayChannel(
-                                    StreamConfig(
-                                        url = channel.streamUrl,
-                                        title = channel.name,
-                                        format = StreamFormat.AUTO,
-                                        extraHeaders = channel.headers
-                                    )
+                                val parsed = StreamConfig.parse(channel.streamUrl, channel.name)
+                                val finalConfig = parsed.copy(
+                                    extraHeaders = channel.headers + parsed.extraHeaders
                                 )
+                                onPlayChannel(finalConfig)
                             }
                     ) {
                         Column(

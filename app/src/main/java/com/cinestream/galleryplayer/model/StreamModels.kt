@@ -77,6 +77,159 @@ data class StreamConfig(
             else -> null
         }
     }
+
+    /**
+     * Checks if this stream config has ClearKey hex keys (e.g. kid:k format)
+     */
+    fun isClearKeyHex(): Boolean {
+        return drmType == DrmType.CLEARKEY &&
+                drmLicenseUrl.contains(":") &&
+                !drmLicenseUrl.startsWith("http", ignoreCase = true)
+    }
+
+    companion object {
+        /**
+         * Universal parser for any stream URL that uses the standard pipe '|' format:
+         * URL|param1=val1&param2=val2...
+         * Supports:
+         * - drmScheme / license_type (clearkey, widevine, playready)
+         * - drmLicense / license_key (hex kid:k or https:// license server)
+         * - Cookie, User-Agent, Referer, Origin, and arbitrary custom HTTP headers
+         */
+        fun parse(rawInput: String, defaultTitle: String = "Live Stream"): StreamConfig {
+            val trimmed = rawInput.trim()
+            if (!trimmed.contains("|")) {
+                val cleanUrl = if (trimmed.endsWith("?") && !trimmed.dropLast(1).contains("?")) trimmed.dropLast(1) else trimmed.trimEnd('&')
+                val isClearKeyHint = trimmed.contains("clearkey", ignoreCase = true)
+                return StreamConfig(
+                    url = cleanUrl,
+                    title = defaultTitle,
+                    drmType = if (isClearKeyHint) DrmType.CLEARKEY else DrmType.NONE
+                )
+            }
+
+            val pipeParts = trimmed.split("|")
+            val rawUrl = pipeParts[0].trim()
+            val cleanUrl = if (rawUrl.endsWith("?") && !rawUrl.dropLast(1).contains("?")) rawUrl.dropLast(1) else rawUrl.trimEnd('&')
+            val paramString = pipeParts.drop(1).joinToString("&")
+
+            var cookie = ""
+            var userAgent = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+            var referer = ""
+            var origin = ""
+            var drmLicense = ""
+            var drmType = DrmType.NONE
+            val extraHeaders = mutableMapOf<String, String>()
+
+            val pairs = paramString.split(Regex("[&\\n]+"))
+            for (pair in pairs) {
+                if (!pair.contains("=")) continue
+                val kv = pair.split("=", limit = 2)
+                val k = kv[0].trim()
+                val v = kv[1].trim()
+                val kLower = k.lowercase()
+
+                when {
+                    kLower == "cookie" -> cookie = v
+                    kLower in listOf("user-agent", "user_agent", "useragent", "http-user-agent") -> userAgent = v
+                    kLower in listOf("referer", "referrer", "http-referer", "http-referrer") -> referer = v
+                    kLower in listOf("origin", "http-origin") -> origin = v
+                    kLower in listOf("drmscheme", "drm_scheme", "license_type", "licensetype", "scheme", "type") -> {
+                        drmType = when {
+                            v.contains("clearkey", ignoreCase = true) -> DrmType.CLEARKEY
+                            v.contains("widevine", ignoreCase = true) -> DrmType.WIDEVINE
+                            v.contains("playready", ignoreCase = true) -> DrmType.PLAYREADY
+                            else -> DrmType.NONE
+                        }
+                    }
+                    kLower in listOf("drmlicense", "drm_license", "license_key", "licensekey", "license_url", "key", "drmkey") -> {
+                        drmLicense = v
+                    }
+                    else -> {
+                        extraHeaders[k] = v
+                    }
+                }
+            }
+
+            // Auto-detect ClearKey if drmLicense has ':' format (kid:key)
+            if (drmType == DrmType.NONE && drmLicense.isNotBlank()) {
+                drmType = if (drmLicense.contains(":") && !drmLicense.startsWith("http", ignoreCase = true)) {
+                    DrmType.CLEARKEY
+                } else {
+                    DrmType.WIDEVINE
+                }
+            }
+
+            // Fallback auto-detection if trimmed string mentions clearkey
+            if (drmType == DrmType.NONE && trimmed.contains("clearkey", ignoreCase = true)) {
+                drmType = DrmType.CLEARKEY
+            }
+
+            return StreamConfig(
+                url = cleanUrl,
+                title = defaultTitle,
+                cookie = cookie,
+                referer = referer,
+                origin = origin,
+                userAgent = userAgent,
+                drmLicenseUrl = drmLicense,
+                drmType = drmType,
+                format = StreamFormat.AUTO,
+                extraHeaders = extraHeaders
+            )
+        }
+
+        /**
+         * Converts hex key pairs into W3C ClearKey JSON:
+         * Input: "f3df7843080ae743bf865dc5fdf64c68:567c863bc12eb74788ea74888c042e1b"
+         * Output: {"keys":[{"kty":"oct","k":"...","kid":"..."}],"type":"temporary"}
+         */
+        fun buildClearKeyJson(hexInput: String): String {
+            val trimmed = hexInput.trim()
+            if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+                return trimmed
+            }
+
+            val keysList = mutableListOf<String>()
+            val pairs = trimmed.split(Regex("[,;\\s]+")).filter { it.contains(":") }
+
+            for (pair in pairs) {
+                val parts = pair.split(":")
+                if (parts.size >= 2) {
+                    val kidHex = parts[0].trim()
+                    val kHex = parts[1].trim()
+                    val kidB64 = hexToBase64Url(kidHex)
+                    val kB64 = hexToBase64Url(kHex)
+                    if (kidB64.isNotBlank() && kB64.isNotBlank()) {
+                        keysList.add(
+                            """{"kty":"oct","k":"$kB64","kid":"$kidB64"}"""
+                        )
+                    }
+                }
+            }
+
+            if (keysList.isEmpty()) return ""
+            return """{"keys":[${keysList.joinToString(",")}],"type":"temporary"}"""
+        }
+
+        private fun hexToBase64Url(hex: String): String {
+            val clean = hex.replace("-", "").replace(" ", "").trim()
+            if (clean.length % 2 != 0) return ""
+            return try {
+                val bytes = ByteArray(clean.length / 2)
+                for (i in bytes.indices) {
+                    val index = i * 2
+                    bytes[i] = clean.substring(index, index + 2).toInt(16).toByte()
+                }
+                android.util.Base64.encodeToString(
+                    bytes,
+                    android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP
+                ).trim()
+            } catch (e: Exception) {
+                ""
+            }
+        }
+    }
 }
 
 /**

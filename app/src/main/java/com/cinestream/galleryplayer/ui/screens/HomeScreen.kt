@@ -51,6 +51,21 @@ fun HomeScreen(
     var selectedDrmType by remember { mutableStateOf(DrmType.CLEARKEY) }
     var showSamplesDialog by remember { mutableStateOf(false) }
 
+    val applyStreamInput: (String) -> Unit = { raw ->
+        if (raw.contains("|")) {
+            val parsed = StreamConfig.parse(raw)
+            streamUrl = parsed.url
+            if (parsed.cookie.isNotBlank()) cookie = parsed.cookie
+            if (parsed.referer.isNotBlank()) referer = parsed.referer
+            if (parsed.origin.isNotBlank()) origin = parsed.origin
+            if (parsed.drmLicenseUrl.isNotBlank()) drmLicenseUrl = parsed.drmLicenseUrl
+            if (parsed.drmType != DrmType.NONE) selectedDrmType = parsed.drmType
+            if (parsed.format != StreamFormat.AUTO) selectedFormat = parsed.format
+        } else {
+            streamUrl = raw
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -92,8 +107,8 @@ fun HomeScreen(
                             .clickable {
                                 val clip = clipboardManager.getText()?.text
                                 if (!clip.isNullOrBlank()) {
-                                    streamUrl = clip.trim()
-                                    Toast.makeText(context, "URL pasted from clipboard", Toast.LENGTH_SHORT).show()
+                                    applyStreamInput(clip.trim())
+                                    Toast.makeText(context, "URL pasted & parsed from clipboard", Toast.LENGTH_SHORT).show()
                                 } else {
                                     Toast.makeText(context, "Clipboard empty", Toast.LENGTH_SHORT).show()
                                 }
@@ -117,7 +132,7 @@ fun HomeScreen(
             // 1. Stream Url
             CineInputField(
                 value = streamUrl,
-                onValueChange = { streamUrl = it },
+                onValueChange = applyStreamInput,
                 placeholder = "Stream Url"
             )
 
@@ -189,19 +204,31 @@ fun HomeScreen(
                 .background(CyanAccent)
                 .tvFocusable(shape = CircleShape)
                 .clickable {
-                    if (streamUrl.isNotBlank()) {
-                        onPlayStream(
+                    val raw = streamUrl.trim()
+                    if (raw.isNotBlank()) {
+                        val parsed = if (raw.contains("|")) StreamConfig.parse(raw) else null
+                        val effectiveConfig = if (parsed != null) {
+                            parsed.copy(
+                                cookie = if (cookie.isNotBlank()) cookie.trim() else parsed.cookie,
+                                referer = if (referer.isNotBlank()) referer.trim() else parsed.referer,
+                                origin = if (origin.isNotBlank()) origin.trim() else parsed.origin,
+                                drmLicenseUrl = if (drmLicenseUrl.isNotBlank()) drmLicenseUrl.trim() else parsed.drmLicenseUrl,
+                                drmType = if (selectedDrmType != DrmType.NONE) selectedDrmType else parsed.drmType,
+                                format = if (selectedFormat != StreamFormat.AUTO) selectedFormat else parsed.format
+                            )
+                        } else {
                             StreamConfig(
-                                url = streamUrl.trim(),
-                                title = "Cine Stream",
-                                cookie = cookie,
-                                referer = referer,
-                                origin = origin,
-                                drmLicenseUrl = drmLicenseUrl,
+                                url = raw,
+                                title = "JD Stream",
+                                cookie = cookie.trim(),
+                                referer = referer.trim(),
+                                origin = origin.trim(),
+                                drmLicenseUrl = drmLicenseUrl.trim(),
                                 drmType = selectedDrmType,
                                 format = selectedFormat
                             )
-                        )
+                        }
+                        onPlayStream(effectiveConfig)
                     } else {
                         Toast.makeText(context, "Please enter a Stream Url", Toast.LENGTH_SHORT).show()
                     }

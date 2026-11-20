@@ -53,15 +53,160 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.drm.DefaultDrmSessionManager
+import androidx.media3.exoplayer.drm.ExoMediaDrm
+import androidx.media3.exoplayer.drm.FrameworkMediaDrm
+import androidx.media3.exoplayer.drm.MediaDrmCallback
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.cinestream.galleryplayer.model.DrmType
 import com.cinestream.galleryplayer.model.StreamConfig
+import com.cinestream.galleryplayer.model.StreamFormat
 import com.cinestream.galleryplayer.ui.components.tvFocusable
 import com.cinestream.galleryplayer.ui.theme.*
 import kotlinx.coroutines.delay
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.Locale
+import java.util.UUID
+
+/**
+ * Universal DRM Callback supporting:
+ * 1. Offline / inline hex ClearKey ("kid:k") -> instant W3C ClearKey JSON conversion
+ * 2. Remote ClearKey license APIs (e.g. JioTV PHP key scripts) with header forwarding
+ * 3. Standard Widevine and PlayReady license servers
+ */
+@UnstableApi
+class UniversalDrmCallback(
+    private val drmType: DrmType,
+    private val licenseKeyOrUrl: String,
+    private val headers: Map<String, String>
+) : MediaDrmCallback {
+
+    override fun executeProvisionRequest(
+        uuid: UUID,
+        request: ExoMediaDrm.ProvisionRequest
+    ): ByteArray {
+        val url = request.defaultUrl + "&signedRequest=" + String(request.data, Charsets.UTF_8)
+        val connection = URL(url).openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.connectTimeout = 15000
+            connection.readTimeout = 15000
+            for ((k, v) in headers) {
+                connection.setRequestProperty(k, v)
+            }
+            return connection.inputStream.readBytes()
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    override fun executeKeyRequest(
+        uuid: UUID,
+        request: ExoMediaDrm.KeyRequest
+    ): ByteArray {
+        val trimmedKey = licenseKeyOrUrl.trim()
+
+        // 1. Hex ClearKey (kid:key) -> immediate W3C JSON return, zero network latency!
+        if (trimmedKey.contains(":") && !trimmedKey.startsWith("http", ignoreCase = true)) {
+            val clearKeyJson = StreamConfig.buildClearKeyJson(trimmedKey)
+            if (clearKeyJson.isNotBlank()) {
+                return clearKeyJson.toByteArray(Charsets.UTF_8)
+            }
+        }
+
+        // 2. Already W3C JSON
+        if (trimmedKey.startsWith("{") && trimmedKey.endsWith("}")) {
+            return trimmedKey.toByteArray(Charsets.UTF_8)
+        }
+
+        // 3. Remote HTTP(S) License Server
+        if (trimmedKey.startsWith("http://", ignoreCase = true) || trimmedKey.startsWith("https://", ignoreCase = true)) {
+            val isClearKey = (uuid == C.CLEARKEY_UUID || drmType == DrmType.CLEARKEY)
+            return fetchRemoteKey(trimmedKey, request.data, headers, isClearKey)
+        }
+
+        return ByteArray(0)
+    }
+
+    private fun fetchRemoteKey(
+        targetUrl: String,
+        bodyData: ByteArray,
+        reqHeaders: Map<String, String>,
+        isClearKey: Boolean
+    ): ByteArray {
+        val hasQueryParams = targetUrl.contains("?")
+        val preferGet = isClearKey && hasQueryParams
+
+        if (preferGet) {
+            try {
+                val resp = executeHttp(targetUrl, "GET", null, reqHeaders)
+                val processed = formatClearKeyIfPossible(resp)
+                if (processed.isNotEmpty()) return processed
+            } catch (_: Exception) {}
+        }
+
+        try {
+            val resp = executeHttp(targetUrl, "POST", bodyData, reqHeaders)
+            if (isClearKey) {
+                val processed = formatClearKeyIfPossible(resp)
+                if (processed.isNotEmpty()) return processed
+            }
+            return resp
+        } catch (e: Exception) {
+            if (!preferGet) {
+                val resp = executeHttp(targetUrl, "GET", null, reqHeaders)
+                if (isClearKey) {
+                    val processed = formatClearKeyIfPossible(resp)
+                    if (processed.isNotEmpty()) return processed
+                }
+                return resp
+            }
+            throw e
+        }
+    }
+
+    private fun formatClearKeyIfPossible(data: ByteArray): ByteArray {
+        val text = String(data, Charsets.UTF_8).trim()
+        if (text.isBlank()) return data
+        if (text.contains(":") && !text.startsWith("{")) {
+            val json = StreamConfig.buildClearKeyJson(text)
+            if (json.isNotBlank()) return json.toByteArray(Charsets.UTF_8)
+        }
+        return data
+    }
+
+    private fun executeHttp(
+        urlString: String,
+        method: String,
+        body: ByteArray?,
+        reqHeaders: Map<String, String>
+    ): ByteArray {
+        val url = URL(urlString)
+        val conn = url.openConnection() as HttpURLConnection
+        try {
+            conn.requestMethod = method
+            conn.connectTimeout = 15000
+            conn.readTimeout = 15000
+            conn.instanceFollowRedirects = true
+            for ((k, v) in reqHeaders) {
+                conn.setRequestProperty(k, v)
+            }
+            if (method == "POST" && body != null && body.isNotEmpty()) {
+                conn.doOutput = true
+                conn.outputStream.use { it.write(body) }
+            }
+            val code = conn.responseCode
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream ?: conn.inputStream
+            return stream.use { it.readBytes() }
+        } finally {
+            conn.disconnect()
+        }
+    }
+}
 
 data class VideoTrackOption(
     val width: Int,
@@ -114,7 +259,7 @@ fun PlayerScreen(
         onDispose {
             if (window != null) {
                 val controller = WindowCompat.getInsetsController(window, window.decorView)
-                controller.show(WindowInsetsCompat.Type.systemBars())
+                controller.hide(WindowInsetsCompat.Type.statusBars())
             }
         }
     }
@@ -145,20 +290,42 @@ fun PlayerScreen(
     var isFullscreenLandscape by remember { mutableStateOf(false) }
     var trackSelectionVersion by remember { mutableIntStateOf(0) }
 
+    // Resolve URL with pipe parameters dynamically
+    val effectiveConfig = remember(streamConfig) {
+        val parsed = if (streamConfig.url.contains("|")) {
+            StreamConfig.parse(streamConfig.url, streamConfig.title)
+        } else null
+
+        if (parsed != null) {
+            parsed.copy(
+                cookie = if (streamConfig.cookie.isNotBlank()) streamConfig.cookie else parsed.cookie,
+                referer = if (streamConfig.referer.isNotBlank()) streamConfig.referer else parsed.referer,
+                origin = if (streamConfig.origin.isNotBlank()) streamConfig.origin else parsed.origin,
+                userAgent = if (streamConfig.userAgent.isNotBlank() && !streamConfig.userAgent.startsWith("Mozilla")) streamConfig.userAgent else parsed.userAgent,
+                drmLicenseUrl = if (streamConfig.drmLicenseUrl.isNotBlank()) streamConfig.drmLicenseUrl else parsed.drmLicenseUrl,
+                drmType = if (streamConfig.drmType != DrmType.NONE) streamConfig.drmType else parsed.drmType,
+                format = if (streamConfig.format != StreamFormat.AUTO) streamConfig.format else parsed.format,
+                extraHeaders = streamConfig.extraHeaders + parsed.extraHeaders
+            )
+        } else {
+            streamConfig
+        }
+    }
+
     // Initialize ExoPlayer with maximum stream compatibility
-    val exoPlayer = remember(streamConfig) {
+    val exoPlayer = remember(effectiveConfig) {
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
             .setKeepPostFor302Redirects(true)
-            .setConnectTimeoutMs(15000)
-            .setReadTimeoutMs(15000)
+            .setConnectTimeoutMs(20000)
+            .setReadTimeoutMs(20000)
             .setUserAgent(
-                streamConfig.userAgent.ifBlank {
+                effectiveConfig.userAgent.ifBlank {
                     "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
                 }
             )
 
-        val headers = streamConfig.toHeaderMap()
+        val headers = effectiveConfig.toHeaderMap()
         if (headers.isNotEmpty()) {
             httpDataSourceFactory.setDefaultRequestProperties(headers)
         }
@@ -166,28 +333,43 @@ fun PlayerScreen(
         val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
 
-        val player = ExoPlayer.Builder(context)
-            .setMediaSourceFactory(mediaSourceFactory)
-            .build()
-
         val mediaItemBuilder = MediaItem.Builder()
-            .setUri(Uri.parse(streamConfig.url))
+            .setUri(Uri.parse(effectiveConfig.url))
 
         // Set MIME type
-        val mimeType = streamConfig.effectiveMimeType()
+        val mimeType = effectiveConfig.effectiveMimeType()
         if (mimeType != null) {
             mediaItemBuilder.setMimeType(mimeType)
         }
 
-        // Attach DRM Configuration if DRM is selected and URL provided
-        if (streamConfig.drmType != DrmType.NONE && streamConfig.drmLicenseUrl.isNotBlank()) {
-            val drmUuid = streamConfig.drmType.uuid ?: C.WIDEVINE_UUID
-            val drmConfig = MediaItem.DrmConfiguration.Builder(drmUuid)
-                .setLicenseUri(streamConfig.drmLicenseUrl)
-                .setLicenseRequestHeaders(headers)
-                .build()
-            mediaItemBuilder.setDrmConfiguration(drmConfig)
+        // Attach DRM Configuration & Custom Session Manager
+        val hasDrm = effectiveConfig.drmType != DrmType.NONE || effectiveConfig.drmLicenseUrl.isNotBlank()
+        if (hasDrm) {
+            val drmUuid = effectiveConfig.drmType.uuid ?: (if (effectiveConfig.isClearKeyHex()) C.CLEARKEY_UUID else C.WIDEVINE_UUID)
+            val drmCallback = UniversalDrmCallback(
+                drmType = effectiveConfig.drmType,
+                licenseKeyOrUrl = effectiveConfig.drmLicenseUrl,
+                headers = headers
+            )
+            val drmSessionManager = DefaultDrmSessionManager.Builder()
+                .setUuidAndExoMediaDrmProvider(drmUuid, FrameworkMediaDrm.DEFAULT_PROVIDER)
+                .setMultiSession(true)
+                .build(drmCallback)
+
+            mediaSourceFactory.setDrmSessionManagerProvider { drmSessionManager }
+
+            val drmConfigBuilder = MediaItem.DrmConfiguration.Builder(drmUuid)
+            if (effectiveConfig.drmLicenseUrl.startsWith("http://", ignoreCase = true) ||
+                effectiveConfig.drmLicenseUrl.startsWith("https://", ignoreCase = true)) {
+                drmConfigBuilder.setLicenseUri(effectiveConfig.drmLicenseUrl)
+            }
+            drmConfigBuilder.setLicenseRequestHeaders(headers)
+            mediaItemBuilder.setDrmConfiguration(drmConfigBuilder.build())
         }
+
+        val player = ExoPlayer.Builder(context)
+            .setMediaSourceFactory(mediaSourceFactory)
+            .build()
 
         player.setMediaItem(mediaItemBuilder.build())
         player.prepare()
@@ -615,11 +797,11 @@ fun PlayerScreen(
                         )
 
                         // Title: e.g. "index.mpd"
-                        val displayTitle = remember(streamConfig) {
-                            if (streamConfig.title.isNotBlank() && streamConfig.title != "Live Stream" && streamConfig.title != "Cine Stream") {
-                                streamConfig.title
+                        val displayTitle = remember(effectiveConfig) {
+                            if (effectiveConfig.title.isNotBlank() && effectiveConfig.title != "Live Stream" && effectiveConfig.title != "Cine Stream" && effectiveConfig.title != "JD Stream") {
+                                effectiveConfig.title
                             } else {
-                                streamConfig.url.substringAfterLast("/").substringBefore("?").ifBlank { "index.mpd" }
+                                effectiveConfig.url.substringAfterLast("/").substringBefore("?").ifBlank { "index.mpd" }
                             }
                         }
 
