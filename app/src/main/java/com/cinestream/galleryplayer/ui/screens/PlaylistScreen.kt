@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
+import com.cinestream.galleryplayer.data.PlaylistStateHolder
 import com.cinestream.galleryplayer.model.M3uChannel
 import com.cinestream.galleryplayer.model.M3uPlaylist
 import com.cinestream.galleryplayer.model.StreamConfig
@@ -58,9 +59,9 @@ fun PlaylistScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    // Multi-M3U playlists list
-    var playlists by remember { mutableStateOf<List<M3uPlaylist>>(emptyList()) }
-    var selectedPlaylistId by remember { mutableStateOf<String?>(null) }
+    // Persistent Multi-M3U playlists from StateHolder
+    val playlists = PlaylistStateHolder.playlists
+    val selectedPlaylistId = PlaylistStateHolder.selectedPlaylistId
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedGroup by remember { mutableStateOf("All") }
@@ -68,12 +69,16 @@ fun PlaylistScreen(
     var isLoading by remember { mutableStateOf(false) }
     var pendingPlaylistName by remember { mutableStateOf("") }
 
+    // Load persistent playlists on launch
+    LaunchedEffect(Unit) {
+        PlaylistStateHolder.initialize(context)
+    }
+
     // Active playlist
     val activePlaylist = remember(playlists, selectedPlaylistId) {
         playlists.firstOrNull { it.id == selectedPlaylistId } ?: playlists.firstOrNull()
     }
 
-    // Active channels from selected playlist (or combined if all)
     val activeChannels = remember(activePlaylist) {
         activePlaylist?.channels ?: emptyList()
     }
@@ -118,9 +123,8 @@ fun PlaylistScreen(
                         sourceUrl = uri.toString(),
                         channels = parsed
                     )
-                    playlists = playlists + newPlaylist
-                    selectedPlaylistId = newPlaylist.id
-                    Toast.makeText(context, "Added '$name' (${parsed.size} channels)", Toast.LENGTH_SHORT).show()
+                    PlaylistStateHolder.addPlaylist(context, newPlaylist)
+                    Toast.makeText(context, "Saved '$name' permanently (${parsed.size} channels)", Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(context, "No channels found in file", Toast.LENGTH_SHORT).show()
                 }
@@ -135,7 +139,7 @@ fun PlaylistScreen(
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Top Header matching Image 2 & 3:
+        // Top Header matching Photo 2 & 3:
         // [Playlists] [ X Available ]   [ ⟳ ]  [ + Add M3U ]
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -153,7 +157,6 @@ fun PlaylistScreen(
                     color = TextPrimary
                 )
 
-                // Teal Pill Badge: "X Available"
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(14.dp))
@@ -188,15 +191,13 @@ fun PlaylistScreen(
                                         fetchAndParseM3u(activePlaylist.sourceUrl)
                                     }
                                     if (reloaded.isNotEmpty()) {
-                                        playlists = playlists.map {
-                                            if (it.id == activePlaylist.id) it.copy(channels = reloaded) else it
-                                        }
-                                        Toast.makeText(context, "Playlist refreshed (${reloaded.size} channels)", Toast.LENGTH_SHORT).show()
+                                        PlaylistStateHolder.updatePlaylistChannels(context, activePlaylist.id, reloaded)
+                                        Toast.makeText(context, "Playlist updated (${reloaded.size} channels)", Toast.LENGTH_SHORT).show()
                                     }
                                     isLoading = false
                                 }
                             } else {
-                                Toast.makeText(context, "Playlists up to date", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Playlists saved & up to date", Toast.LENGTH_SHORT).show()
                             }
                         },
                     contentAlignment = Alignment.Center
@@ -237,8 +238,7 @@ fun PlaylistScreen(
                 CircularProgressIndicator(color = CyanAccent)
             }
         } else if (playlists.isEmpty()) {
-            // Empty State matching Photo 3:
-            // Centered [≡+] icon, "No playlist added yet", and [ + Add M3U Playlist ] Cyan button
+            // Empty State matching Photo 3
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -302,8 +302,8 @@ fun PlaylistScreen(
                                 ),
                                 RoundedCornerShape(10.dp)
                             )
-                            .tvFocusable(shape = RoundedCornerShape(10.dp), onClick = { selectedPlaylistId = pl.id })
-                            .clickable { selectedPlaylistId = pl.id }
+                            .tvFocusable(shape = RoundedCornerShape(10.dp), onClick = { PlaylistStateHolder.selectedPlaylistId = pl.id })
+                            .clickable { PlaylistStateHolder.selectedPlaylistId = pl.id }
                             .padding(horizontal = 14.dp, vertical = 8.dp)
                     ) {
                         Row(
@@ -329,11 +329,10 @@ fun PlaylistScreen(
                                 modifier = Modifier
                                     .size(16.dp)
                                     .clickable {
-                                        playlists = playlists.filter { it.id != pl.id }
-                                        if (selectedPlaylistId == pl.id) {
-                                            selectedPlaylistId = playlists.firstOrNull()?.id
+                                        coroutineScope.launch {
+                                            PlaylistStateHolder.removePlaylist(context, pl.id)
+                                            Toast.makeText(context, "Removed '${pl.name}'", Toast.LENGTH_SHORT).show()
                                         }
-                                        Toast.makeText(context, "Removed '${pl.name}'", Toast.LENGTH_SHORT).show()
                                     }
                             )
                         }
@@ -341,15 +340,14 @@ fun PlaylistScreen(
                 }
             }
 
-            // Search Bar matching Photo 3:
-            // [ 🔍 Search 0 playlists (Live TV, Sports, etc.)... ]
+            // Search Bar matching Photo 3
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
                     .background(NavyInput)
                     .border(BorderStroke(1.dp, NavyBorder), RoundedCornerShape(14.dp))
-                .tvFocusable(shape = RoundedCornerShape(14.dp))
+                    .tvFocusable(shape = RoundedCornerShape(14.dp))
                     .padding(horizontal = 16.dp, vertical = 14.dp)
             ) {
                 Row(
@@ -534,9 +532,8 @@ fun PlaylistScreen(
                             sourceUrl = url,
                             channels = parsed
                         )
-                        playlists = playlists + newPlaylist
-                        selectedPlaylistId = newPlaylist.id
-                        Toast.makeText(context, "Added '$playlistName' (${parsed.size} channels)", Toast.LENGTH_SHORT).show()
+                        PlaylistStateHolder.addPlaylist(context, newPlaylist)
+                        Toast.makeText(context, "Saved '$playlistName' permanently (${parsed.size} channels)", Toast.LENGTH_SHORT).show()
                     } else {
                         Toast.makeText(context, "Invalid playlist URL or empty playlist", Toast.LENGTH_LONG).show()
                     }
@@ -577,14 +574,12 @@ private fun AddMultiM3uModal(
                     color = TextPrimary
                 )
 
-                // Playlist Name Field
                 CineInputField(
                     value = playlistName,
                     onValueChange = { playlistName = it },
                     placeholder = "Playlist Name (e.g. Sports TV)"
                 )
 
-                // Playlist URL Field
                 CineInputField(
                     value = playlistUrl,
                     onValueChange = { playlistUrl = it },

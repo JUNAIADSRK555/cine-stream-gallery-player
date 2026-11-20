@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.cinestream.galleryplayer.data.PlaylistStateHolder
 import com.cinestream.galleryplayer.model.StreamConfig
 import com.cinestream.galleryplayer.ui.components.AppTab
 import com.cinestream.galleryplayer.ui.components.CineBottomBar
@@ -60,6 +61,11 @@ fun CinePlayerApp() {
     var currentTab by remember { mutableStateOf(AppTab.HOME) }
     var showSamplesScreen by remember { mutableStateOf(false) }
     var currentStreamConfig by remember { mutableStateOf<StreamConfig?>(null) }
+
+    // Pre-load saved M3U playlists into memory
+    LaunchedEffect(Unit) {
+        PlaylistStateHolder.initialize(context)
+    }
 
     // Hardware back handler when in Samples view
     BackHandler(enabled = showSamplesScreen && currentStreamConfig == null) {
