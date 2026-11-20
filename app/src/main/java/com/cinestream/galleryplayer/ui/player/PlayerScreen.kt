@@ -236,6 +236,28 @@ enum class PlayerResizeMode(val displayName: String, val modeInt: Int) {
     FIXED_HEIGHT("4:3", AspectRatioFrameLayout.RESIZE_MODE_FIXED_HEIGHT)
 }
 
+private fun applyImmersiveMode(window: android.view.Window?) {
+    if (window == null) return
+    window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    val controller = WindowCompat.getInsetsController(window, window.decorView)
+    controller.hide(WindowInsetsCompat.Type.systemBars())
+    controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        window.attributes.layoutInDisplayCutoutMode =
+            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+    }
+    @Suppress("DEPRECATION")
+    window.decorView.systemUiVisibility = (
+        android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        or android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+        or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+        or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+        or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
+    )
+}
+
 @OptIn(UnstableApi::class)
 @Composable
 fun PlayerScreen(
@@ -247,20 +269,14 @@ fun PlayerScreen(
     val activity = context as? Activity
     val window = activity?.window
 
+    val isCurrentLandscape = context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     // Immersive Mode: Hide Status Bar (5G, Wifi, Clock, Battery) & Navigation Bar
     DisposableEffect(window) {
-        if (window != null) {
-            val controller = WindowCompat.getInsetsController(window, window.decorView)
-            controller.hide(WindowInsetsCompat.Type.systemBars())
-            controller.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                window.attributes.layoutInDisplayCutoutMode =
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-            }
-        }
+        applyImmersiveMode(window)
         onDispose {
             if (window != null) {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 val controller = WindowCompat.getInsetsController(window, window.decorView)
                 controller.hide(WindowInsetsCompat.Type.statusBars())
             }
@@ -345,8 +361,9 @@ fun PlayerScreen(
             mediaItemBuilder.setMimeType(mimeType)
         }
 
-        // Attach DRM Configuration & Custom Session Manager
-        val hasDrm = effectiveConfig.drmType != DrmType.NONE || effectiveConfig.drmLicenseUrl.isNotBlank()
+        // Attach DRM Configuration & Custom Session Manager ONLY when DRM info is present
+        val hasDrm = (effectiveConfig.drmType != DrmType.NONE && effectiveConfig.drmLicenseUrl.isNotBlank()) ||
+                effectiveConfig.drmLicenseUrl.isNotBlank()
         if (hasDrm) {
             val drmUuid = effectiveConfig.drmType.uuid ?: (if (effectiveConfig.isClearKeyHex()) C.CLEARKEY_UUID else C.WIDEVINE_UUID)
             val drmCallback = UniversalDrmCallback(
@@ -417,6 +434,8 @@ fun PlayerScreen(
 
         onDispose {
             exoPlayer.removeListener(listener)
+            exoPlayer.stop()
+            exoPlayer.clearMediaItems()
             exoPlayer.release()
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
@@ -432,11 +451,15 @@ fun PlayerScreen(
         }
     }
 
-    // Auto-hide controls timer (4s)
-    LaunchedEffect(showControls, isScreenLocked) {
+    // Auto-hide controls timer (4s) & enforce system bars hidden
+    LaunchedEffect(showControls, isScreenLocked, isCurrentLandscape) {
+        if (!showControls || isCurrentLandscape) {
+            applyImmersiveMode(window)
+        }
         if (showControls && !isScreenLocked) {
             delay(4000)
             showControls = false
+            applyImmersiveMode(window)
         }
     }
 
@@ -554,7 +577,6 @@ fun PlayerScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black)
             .focusable()
             .onKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown) {
@@ -621,8 +643,14 @@ fun PlayerScreen(
                 }
             },
             update = { playerView ->
-                playerView.player = exoPlayer
+                if (playerView.player != exoPlayer) {
+                    playerView.player = null
+                    playerView.player = exoPlayer
+                }
                 playerView.resizeMode = currentResizeMode.modeInt
+            },
+            onRelease = { playerView ->
+                playerView.player = null
             },
             modifier = Modifier.fillMaxSize()
         )
@@ -787,6 +815,10 @@ fun PlayerScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.TopCenter)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { /* Consume clicks so top bar taps don't dismiss controls */ }
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -910,6 +942,10 @@ fun PlayerScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { /* Consume clicks so bottom bar taps don't dismiss controls */ }
                         .padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
                     // Timeline Scrubber
@@ -1020,10 +1056,9 @@ fun PlayerScreen(
                             )
 
                             // 4. [ ⛶ ] Fullscreen / Rotate Screen (Photo 2)
-                            val isCurrentLandscape = context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
                             Box(
                                 modifier = Modifier
-                                    .size(36.dp)
+                                    .size(44.dp)
                                     .clip(CircleShape)
                                     .tvFocusable(shape = CircleShape)
                                     .clickable {
@@ -1032,11 +1067,7 @@ fun PlayerScreen(
                                         } else {
                                             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                                         }
-                                        if (window != null) {
-                                            val insetsController = WindowCompat.getInsetsController(window, window.decorView)
-                                            insetsController.hide(WindowInsetsCompat.Type.systemBars())
-                                            insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                                        }
+                                        applyImmersiveMode(window)
                                     },
                                 contentAlignment = Alignment.Center
                             ) {

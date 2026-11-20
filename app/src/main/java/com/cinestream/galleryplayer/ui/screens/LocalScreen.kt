@@ -417,7 +417,7 @@ fun VideoThumbnail(
             // High performance video frame extraction with disk/memory caching via Coil
             AsyncImage(
                 model = ImageRequest.Builder(context)
-                    .data(if (video.path.isNotBlank()) video.path else video.contentUri)
+                    .data(video.contentUri)
                     .videoFramePercent(0.1)
                     .crossfade(true)
                     .build(),

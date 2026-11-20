@@ -72,6 +72,19 @@ object PlaylistStateHolder {
         PlaylistStorageManager.savePlaylists(context, playlists)
     }
 
+    suspend fun updatePlaylist(context: Context, playlist: M3uPlaylist) {
+        playlists = playlists.map {
+            if (it.id == playlist.id) playlist else it
+        }
+        PlaylistStorageManager.savePlaylists(context, playlists)
+    }
+
+    suspend fun clearAllPlaylists(context: Context) {
+        playlists = emptyList()
+        selectedPlaylistId = null
+        PlaylistStorageManager.savePlaylists(context, emptyList())
+    }
+
     suspend fun updatePlaylistChannels(context: Context, playlistId: String, newChannels: List<M3uChannel>) {
         playlists = playlists.map {
             if (it.id == playlistId) it.copy(channels = newChannels) else it

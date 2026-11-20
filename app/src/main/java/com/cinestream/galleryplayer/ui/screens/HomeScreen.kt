@@ -87,7 +87,7 @@ fun HomeScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Cine Network Stream",
+                    text = "JD Network Stream",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary
@@ -113,16 +113,6 @@ fun HomeScreen(
                                     Toast.makeText(context, "Clipboard empty", Toast.LENGTH_SHORT).show()
                                 }
                             }
-                    )
-
-                    // Star Icon (Opens Sample Streams Modal)
-                    Icon(
-                        imageVector = Icons.Default.Star,
-                        contentDescription = "Samples / Favorites",
-                        tint = CyanAccent,
-                        modifier = Modifier
-                            .size(26.dp)
-                            .clickable { showSamplesDialog = true }
                     )
                 }
             }

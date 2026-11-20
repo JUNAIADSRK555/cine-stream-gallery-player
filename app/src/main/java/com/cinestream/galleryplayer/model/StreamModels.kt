@@ -38,6 +38,8 @@ enum class DrmType(val displayName: String, val uuid: UUID?) {
     }
 }
 
+const val DEFAULT_USER_AGENT = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+
 /**
  * Stream configuration data class holding all connection & security parameters.
  */
@@ -47,7 +49,7 @@ data class StreamConfig(
     val cookie: String = "",
     val referer: String = "",
     val origin: String = "",
-    val userAgent: String = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+    val userAgent: String = DEFAULT_USER_AGENT,
     val drmLicenseUrl: String = "",
     val drmType: DrmType = DrmType.NONE,
     val format: StreamFormat = StreamFormat.AUTO,
@@ -55,11 +57,14 @@ data class StreamConfig(
 ) {
     fun toHeaderMap(): Map<String, String> {
         val map = mutableMapOf<String, String>()
+        val effectiveUA = userAgent.ifBlank { DEFAULT_USER_AGENT }.trim()
+        map["User-Agent"] = effectiveUA
         if (cookie.isNotBlank()) map["Cookie"] = cookie.trim()
         if (referer.isNotBlank()) map["Referer"] = referer.trim()
         if (origin.isNotBlank()) map["Origin"] = origin.trim()
-        if (userAgent.isNotBlank()) map["User-Agent"] = userAgent.trim()
-        map.putAll(extraHeaders)
+        for ((k, v) in extraHeaders) {
+            if (v.isNotBlank()) map[k] = v.trim()
+        }
         return map
     }
 
@@ -100,11 +105,10 @@ data class StreamConfig(
             val trimmed = rawInput.trim()
             if (!trimmed.contains("|")) {
                 val cleanUrl = if (trimmed.endsWith("?") && !trimmed.dropLast(1).contains("?")) trimmed.dropLast(1) else trimmed.trimEnd('&')
-                val isClearKeyHint = trimmed.contains("clearkey", ignoreCase = true)
                 return StreamConfig(
                     url = cleanUrl,
                     title = defaultTitle,
-                    drmType = if (isClearKeyHint) DrmType.CLEARKEY else DrmType.NONE
+                    drmType = DrmType.NONE
                 )
             }
 
@@ -114,7 +118,7 @@ data class StreamConfig(
             val paramString = pipeParts.drop(1).joinToString("&")
 
             var cookie = ""
-            var userAgent = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+            var userAgent = DEFAULT_USER_AGENT
             var referer = ""
             var origin = ""
             var drmLicense = ""
@@ -151,7 +155,7 @@ data class StreamConfig(
                 }
             }
 
-            // Auto-detect ClearKey if drmLicense has ':' format (kid:key)
+            // Only attach DRM if drmLicense is present or type explicitly set
             if (drmType == DrmType.NONE && drmLicense.isNotBlank()) {
                 drmType = if (drmLicense.contains(":") && !drmLicense.startsWith("http", ignoreCase = true)) {
                     DrmType.CLEARKEY
@@ -160,18 +164,13 @@ data class StreamConfig(
                 }
             }
 
-            // Fallback auto-detection if trimmed string mentions clearkey
-            if (drmType == DrmType.NONE && trimmed.contains("clearkey", ignoreCase = true)) {
-                drmType = DrmType.CLEARKEY
-            }
-
             return StreamConfig(
                 url = cleanUrl,
                 title = defaultTitle,
                 cookie = cookie,
                 referer = referer,
                 origin = origin,
-                userAgent = userAgent,
+                userAgent = userAgent.ifBlank { DEFAULT_USER_AGENT },
                 drmLicenseUrl = drmLicense,
                 drmType = drmType,
                 format = StreamFormat.AUTO,
@@ -291,8 +290,23 @@ data class M3uPlaylist(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     val sourceUrl: String,
+    val userAgentPreset: String = "Default",
+    val customUserAgent: String = "",
     val channels: List<M3uChannel> = emptyList(),
     val dateAdded: Long = System.currentTimeMillis()
 ) {
     val channelCount: Int get() = channels.size
+
+    fun getEffectiveUserAgent(): String {
+        return when (userAgentPreset) {
+            "Chrome(Android)" -> "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+            "Chrome(PC)" -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            "IE(PC)" -> "Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko"
+            "Firefox(PC)" -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0"
+            "iPhone" -> "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
+            "Nokia" -> "NokiaN97/21.0.045 (SymbianOS/9.4; Series60/5.0 Mozilla/5.0; Profile/MIDP-2.1 Configuration/CLDC-1.1) AppleWebkit/525 (KHTML, like Gecko) BrowserNG/7.1.4"
+            "Custom" -> customUserAgent.ifBlank { DEFAULT_USER_AGENT }
+            else -> DEFAULT_USER_AGENT
+        }
+    }
 }
