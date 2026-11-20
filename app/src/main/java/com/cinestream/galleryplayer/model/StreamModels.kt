@@ -9,7 +9,7 @@ import java.util.UUID
  * Supported stream formats for explicit MIME type overrides.
  */
 enum class StreamFormat(val displayName: String, val mimeType: String?) {
-    AUTO("Auto (Detect)", null),
+    AUTO("Default", null),
     HLS("HLS (.m3u8)", MimeTypes.APPLICATION_M3U8),
     DASH("DASH (.mpd)", MimeTypes.APPLICATION_MPD),
     SMOOTH_STREAMING("SmoothStreaming (.ism)", MimeTypes.APPLICATION_SS),
@@ -27,8 +27,8 @@ enum class StreamFormat(val displayName: String, val mimeType: String?) {
  */
 enum class DrmType(val displayName: String, val uuid: UUID?) {
     NONE("None", null),
-    WIDEVINE("Widevine", C.WIDEVINE_UUID),
     CLEARKEY("ClearKey", C.CLEARKEY_UUID),
+    WIDEVINE("Widevine", C.WIDEVINE_UUID),
     PLAYREADY("PlayReady", C.PLAYREADY_UUID);
 
     companion object {
@@ -47,7 +47,7 @@ data class StreamConfig(
     val cookie: String = "",
     val referer: String = "",
     val origin: String = "",
-    val userAgent: String = "CineStreamPlayer/1.0",
+    val userAgent: String = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
     val drmLicenseUrl: String = "",
     val drmType: DrmType = DrmType.NONE,
     val format: StreamFormat = StreamFormat.AUTO,
@@ -61,6 +61,21 @@ data class StreamConfig(
         if (userAgent.isNotBlank()) map["User-Agent"] = userAgent.trim()
         map.putAll(extraHeaders)
         return map
+    }
+
+    fun effectiveMimeType(): String? {
+        if (format != StreamFormat.AUTO && format.mimeType != null) {
+            return format.mimeType
+        }
+        val lower = url.lowercase().substringBefore("?")
+        return when {
+            lower.endsWith(".mpd") -> MimeTypes.APPLICATION_MPD
+            lower.endsWith(".m3u8") -> MimeTypes.APPLICATION_M3U8
+            lower.endsWith(".ism") || lower.endsWith(".isml/manifest") -> MimeTypes.APPLICATION_SS
+            lower.endsWith(".mp4") -> MimeTypes.VIDEO_MP4
+            lower.endsWith(".webm") -> MimeTypes.VIDEO_WEBM
+            else -> null
+        }
     }
 }
 
@@ -78,7 +93,7 @@ data class LocalVideoItem(
 ) {
     val formattedDuration: String
         get() {
-            if (durationMs <= 0) return "--:--"
+            if (durationMs <= 0) return "00:00"
             val totalSeconds = durationMs / 1000
             val hours = totalSeconds / 3600
             val minutes = (totalSeconds % 3600) / 60
@@ -95,7 +110,7 @@ data class LocalVideoItem(
             if (sizeBytes <= 0) return "0 MB"
             val mb = sizeBytes.toDouble() / (1024 * 1024)
             return if (mb >= 1024) {
-                String.format("%.2f GB", mb / 1024)
+                String.format("%.1f GB", mb / 1024)
             } else {
                 String.format("%.1f MB", mb)
             }
@@ -115,3 +130,16 @@ data class M3uChannel(
     val drmLicenseUrl: String? = null,
     val drmType: DrmType = DrmType.NONE
 )
+
+/**
+ * Represents a saved M3U playlist for Multi-M3U support.
+ */
+data class M3uPlaylist(
+    val id: String = UUID.randomUUID().toString(),
+    val name: String,
+    val sourceUrl: String,
+    val channels: List<M3uChannel> = emptyList(),
+    val dateAdded: Long = System.currentTimeMillis()
+) {
+    val channelCount: Int get() = channels.size
+}

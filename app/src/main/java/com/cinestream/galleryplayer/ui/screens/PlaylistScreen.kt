@@ -28,7 +28,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -38,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.cinestream.galleryplayer.model.M3uChannel
+import com.cinestream.galleryplayer.model.M3uPlaylist
 import com.cinestream.galleryplayer.model.StreamConfig
 import com.cinestream.galleryplayer.model.StreamFormat
 import com.cinestream.galleryplayer.ui.components.CineInputField
@@ -58,14 +58,28 @@ fun PlaylistScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    var channels by remember { mutableStateOf<List<M3uChannel>>(emptyList()) }
+    // Multi-M3U playlists list
+    var playlists by remember { mutableStateOf<List<M3uPlaylist>>(emptyList()) }
+    var selectedPlaylistId by remember { mutableStateOf<String?>(null) }
+
     var searchQuery by remember { mutableStateOf("") }
     var selectedGroup by remember { mutableStateOf("All") }
     var showAddDialog by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
+    var pendingPlaylistName by remember { mutableStateOf("") }
 
-    val filteredChannels = remember(channels, searchQuery, selectedGroup) {
-        channels.filter { channel ->
+    // Active playlist
+    val activePlaylist = remember(playlists, selectedPlaylistId) {
+        playlists.firstOrNull { it.id == selectedPlaylistId } ?: playlists.firstOrNull()
+    }
+
+    // Active channels from selected playlist (or combined if all)
+    val activeChannels = remember(activePlaylist) {
+        activePlaylist?.channels ?: emptyList()
+    }
+
+    val filteredChannels = remember(activeChannels, searchQuery, selectedGroup) {
+        activeChannels.filter { channel ->
             val matchesGroup = selectedGroup == "All" || channel.group.equals(selectedGroup, ignoreCase = true)
             val matchesSearch = searchQuery.isBlank() ||
                     channel.name.contains(searchQuery, ignoreCase = true) ||
@@ -74,9 +88,9 @@ fun PlaylistScreen(
         }
     }
 
-    val groups = remember(channels) {
-        if (channels.isEmpty()) emptyList()
-        else listOf("All") + channels.map { it.group }.distinct().sorted()
+    val groups = remember(activeChannels) {
+        if (activeChannels.isEmpty()) emptyList()
+        else listOf("All") + activeChannels.map { it.group }.distinct().sorted()
     }
 
     val m3uFilePicker = rememberLauncherForActivityResult(
@@ -96,9 +110,20 @@ fun PlaylistScreen(
                         emptyList()
                     }
                 }
-                channels = parsed
                 isLoading = false
-                Toast.makeText(context, "Loaded ${parsed.size} channels", Toast.LENGTH_SHORT).show()
+                if (parsed.isNotEmpty()) {
+                    val name = pendingPlaylistName.ifBlank { "Playlist ${playlists.size + 1}" }
+                    val newPlaylist = M3uPlaylist(
+                        name = name,
+                        sourceUrl = uri.toString(),
+                        channels = parsed
+                    )
+                    playlists = playlists + newPlaylist
+                    selectedPlaylistId = newPlaylist.id
+                    Toast.makeText(context, "Added '$name' (${parsed.size} channels)", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "No channels found in file", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -108,10 +133,10 @@ fun PlaylistScreen(
             .fillMaxSize()
             .background(NavyBackground)
             .padding(horizontal = 20.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Top Row matching Image 2:
-        // [Playlists] [ 0 Available ]   [ ⟳ ]  [ + Add M3U ]
+        // Top Header matching Image 2 & 3:
+        // [Playlists] [ X Available ]   [ ⟳ ]  [ + Add M3U ]
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -136,7 +161,7 @@ fun PlaylistScreen(
                         .padding(horizontal = 12.dp, vertical = 5.dp)
                 ) {
                     Text(
-                        text = "${channels.size} Available",
+                        text = "${playlists.size} Available",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = CyanAccent
@@ -148,7 +173,7 @@ fun PlaylistScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Circular Refresh Button [⟳]
+                // Refresh Button [⟳]
                 Box(
                     modifier = Modifier
                         .size(40.dp)
@@ -156,7 +181,23 @@ fun PlaylistScreen(
                         .background(TealIconBg)
                         .tvFocusable(shape = CircleShape)
                         .clickable {
-                            Toast.makeText(context, "Playlists refreshed", Toast.LENGTH_SHORT).show()
+                            if (activePlaylist != null && activePlaylist.sourceUrl.startsWith("http", ignoreCase = true)) {
+                                coroutineScope.launch {
+                                    isLoading = true
+                                    val reloaded = withContext(Dispatchers.IO) {
+                                        fetchAndParseM3u(activePlaylist.sourceUrl)
+                                    }
+                                    if (reloaded.isNotEmpty()) {
+                                        playlists = playlists.map {
+                                            if (it.id == activePlaylist.id) it.copy(channels = reloaded) else it
+                                        }
+                                        Toast.makeText(context, "Playlist refreshed (${reloaded.size} channels)", Toast.LENGTH_SHORT).show()
+                                    }
+                                    isLoading = false
+                                }
+                            } else {
+                                Toast.makeText(context, "Playlists up to date", Toast.LENGTH_SHORT).show()
+                            }
                         },
                     contentAlignment = Alignment.Center
                 ) {
@@ -188,65 +229,6 @@ fun PlaylistScreen(
             }
         }
 
-        // Search Bar matching Image 2:
-        // [ 🔍 Search 0 playlists (Live TV, Sports, etc.)... ]
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(NavyInput)
-                .border(BorderStroke(1.dp, NavyBorder), RoundedCornerShape(14.dp))
-                .tvFocusable(shape = RoundedCornerShape(14.dp))
-                .padding(horizontal = 16.dp, vertical = 14.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = "Search",
-                    tint = TextMuted,
-                    modifier = Modifier.size(22.dp)
-                )
-
-                Box(modifier = Modifier.weight(1f)) {
-                    if (searchQuery.isEmpty()) {
-                        Text(
-                            text = "Search ${channels.size} playlists (Live TV, Sports, etc.)...",
-                            color = TextMuted,
-                            fontSize = 13.sp
-                        )
-                    }
-                    BasicTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        singleLine = true,
-                        textStyle = TextStyle(
-                            color = TextPrimary,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium
-                        ),
-                        cursorBrush = SolidColor(CyanAccent),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                if (searchQuery.isNotEmpty()) {
-                    Icon(
-                        imageVector = Icons.Default.Clear,
-                        contentDescription = "Clear Search",
-                        tint = TextSecondary,
-                        modifier = Modifier
-                            .size(18.dp)
-                            .clickable { searchQuery = "" }
-                    )
-                }
-            }
-        }
-
-        // Content Area: Empty State or Channels Grid
         if (isLoading) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -254,9 +236,9 @@ fun PlaylistScreen(
             ) {
                 CircularProgressIndicator(color = CyanAccent)
             }
-        } else if (channels.isEmpty()) {
-            // Empty State matching Image 2:
-            // Centered icon [≡+], "No playlist added yet", and [ + Add M3U Playlist ] Cyan button
+        } else if (playlists.isEmpty()) {
+            // Empty State matching Photo 3:
+            // Centered [≡+] icon, "No playlist added yet", and [ + Add M3U Playlist ] Cyan button
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -265,7 +247,6 @@ fun PlaylistScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Muted Playlist Plus Icon
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.PlaylistPlay,
                         contentDescription = "Playlist Empty",
@@ -273,7 +254,6 @@ fun PlaylistScreen(
                         modifier = Modifier.size(72.dp)
                     )
 
-                    // Title: "No playlist added yet"
                     Text(
                         text = "No playlist added yet",
                         fontSize = 18.sp,
@@ -283,7 +263,6 @@ fun PlaylistScreen(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    // Big Cyan Button: [ + Add M3U Playlist ]
                     Button(
                         onClick = { showAddDialog = true },
                         colors = ButtonDefaults.buttonColors(containerColor = CyanAccent),
@@ -303,6 +282,123 @@ fun PlaylistScreen(
                 }
             }
         } else {
+            // Multi-M3U Playlist Tabs Bar:
+            // Allows user to switch between multiple added M3U playlists!
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                items(playlists, key = { it.id }) { pl ->
+                    val isSelected = pl.id == activePlaylist?.id
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isSelected) TealPill else NavyCard)
+                            .border(
+                                BorderStroke(
+                                    width = if (isSelected) 1.5.dp else 1.dp,
+                                    color = if (isSelected) CyanAccent else NavyBorder
+                                ),
+                                RoundedCornerShape(10.dp)
+                            )
+                            .tvFocusable(shape = RoundedCornerShape(10.dp), onClick = { selectedPlaylistId = pl.id })
+                            .clickable { selectedPlaylistId = pl.id }
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = pl.name,
+                                color = if (isSelected) CyanAccent else TextPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            )
+                            Text(
+                                text = "(${pl.channelCount})",
+                                color = if (isSelected) CyanAccent.copy(alpha = 0.8f) else TextSecondary,
+                                fontSize = 11.sp
+                            )
+                            // Delete button for this playlist
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Delete",
+                                tint = TextMuted,
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clickable {
+                                        playlists = playlists.filter { it.id != pl.id }
+                                        if (selectedPlaylistId == pl.id) {
+                                            selectedPlaylistId = playlists.firstOrNull()?.id
+                                        }
+                                        Toast.makeText(context, "Removed '${pl.name}'", Toast.LENGTH_SHORT).show()
+                                    }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Search Bar matching Photo 3:
+            // [ 🔍 Search 0 playlists (Live TV, Sports, etc.)... ]
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(NavyInput)
+                    .border(BorderStroke(1.dp, NavyBorder), RoundedCornerShape(14.dp))
+                .tvFocusable(shape = RoundedCornerShape(14.dp))
+                    .padding(horizontal = 16.dp, vertical = 14.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = TextMuted,
+                        modifier = Modifier.size(22.dp)
+                    )
+
+                    Box(modifier = Modifier.weight(1f)) {
+                        if (searchQuery.isEmpty()) {
+                            Text(
+                                text = "Search ${activeChannels.size} channels in ${activePlaylist?.name ?: "playlist"}...",
+                                color = TextMuted,
+                                fontSize = 13.sp
+                            )
+                        }
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            singleLine = true,
+                            textStyle = TextStyle(
+                                color = TextPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            ),
+                            cursorBrush = SolidColor(CyanAccent),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    if (searchQuery.isNotEmpty()) {
+                        Icon(
+                            imageVector = Icons.Default.Clear,
+                            contentDescription = "Clear",
+                            tint = TextSecondary,
+                            modifier = Modifier
+                                .size(18.dp)
+                                .clickable { searchQuery = "" }
+                        )
+                    }
+                }
+            }
+
             // Category Chips Row
             if (groups.size > 1) {
                 LazyRow(
@@ -315,10 +411,7 @@ fun PlaylistScreen(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(if (isSelected) CyanAccent else NavyCard)
-                                .tvFocusable(
-                                    shape = RoundedCornerShape(8.dp),
-                                    onClick = { selectedGroup = group }
-                                )
+                                .tvFocusable(shape = RoundedCornerShape(8.dp), onClick = { selectedGroup = group })
                                 .clickable { selectedGroup = group }
                                 .padding(horizontal = 14.dp, vertical = 7.dp)
                         ) {
@@ -333,7 +426,7 @@ fun PlaylistScreen(
                 }
             }
 
-            // Channel Grid
+            // Channels Grid
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 150.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -422,27 +515,35 @@ fun PlaylistScreen(
         }
     }
 
-    // Add M3U Dialog
+    // Add Multi-M3U Modal
     if (showAddDialog) {
-        AddM3uModal(
+        AddMultiM3uModal(
             onDismiss = { showAddDialog = false },
-            onLoadUrl = { url ->
+            onLoadUrl = { name, url ->
                 showAddDialog = false
                 isLoading = true
                 coroutineScope.launch {
                     val parsed = withContext(Dispatchers.IO) {
                         fetchAndParseM3u(url)
                     }
-                    channels = parsed
                     isLoading = false
                     if (parsed.isNotEmpty()) {
-                        Toast.makeText(context, "Loaded ${parsed.size} channels", Toast.LENGTH_SHORT).show()
+                        val playlistName = name.ifBlank { "Playlist ${playlists.size + 1}" }
+                        val newPlaylist = M3uPlaylist(
+                            name = playlistName,
+                            sourceUrl = url,
+                            channels = parsed
+                        )
+                        playlists = playlists + newPlaylist
+                        selectedPlaylistId = newPlaylist.id
+                        Toast.makeText(context, "Added '$playlistName' (${parsed.size} channels)", Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(context, "Playlist empty or invalid URL", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "Invalid playlist URL or empty playlist", Toast.LENGTH_LONG).show()
                     }
                 }
             },
-            onPickFile = {
+            onPickFile = { name ->
+                pendingPlaylistName = name
                 showAddDialog = false
                 m3uFilePicker.launch(arrayOf("*/*"))
             }
@@ -451,17 +552,18 @@ fun PlaylistScreen(
 }
 
 @Composable
-private fun AddM3uModal(
+private fun AddMultiM3uModal(
     onDismiss: () -> Unit,
-    onLoadUrl: (String) -> Unit,
-    onPickFile: () -> Unit
+    onLoadUrl: (name: String, url: String) -> Unit,
+    onPickFile: (name: String) -> Unit
 ) {
+    var playlistName by remember { mutableStateOf("") }
     var playlistUrl by remember { mutableStateOf("") }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
             colors = CardDefaults.cardColors(containerColor = NavySurface),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(18.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(
@@ -475,6 +577,14 @@ private fun AddM3uModal(
                     color = TextPrimary
                 )
 
+                // Playlist Name Field
+                CineInputField(
+                    value = playlistName,
+                    onValueChange = { playlistName = it },
+                    placeholder = "Playlist Name (e.g. Sports TV)"
+                )
+
+                // Playlist URL Field
                 CineInputField(
                     value = playlistUrl,
                     onValueChange = { playlistUrl = it },
@@ -486,10 +596,10 @@ private fun AddM3uModal(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Button(
-                        onClick = onPickFile,
+                        onClick = { onPickFile(playlistName) },
                         colors = ButtonDefaults.buttonColors(containerColor = NavyCard),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.weight(1f).tvFocusable(shape = RoundedCornerShape(8.dp))
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f).tvFocusable(shape = RoundedCornerShape(10.dp))
                     ) {
                         Icon(
                             imageVector = Icons.Default.FolderOpen,
@@ -504,14 +614,14 @@ private fun AddM3uModal(
                     Button(
                         onClick = {
                             if (playlistUrl.isNotBlank()) {
-                                onLoadUrl(playlistUrl.trim())
+                                onLoadUrl(playlistName, playlistUrl.trim())
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = CyanAccent),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.weight(1f).tvFocusable(shape = RoundedCornerShape(8.dp))
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f).tvFocusable(shape = RoundedCornerShape(10.dp))
                     ) {
-                        Text("Load", color = NavyBackground, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text("Add URL", color = NavyBackground, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
                 }
             }
@@ -525,7 +635,10 @@ private fun fetchAndParseM3u(urlString: String): List<M3uChannel> {
         val connection = url.openConnection() as HttpURLConnection
         connection.connectTimeout = 15000
         connection.readTimeout = 15000
-        connection.setRequestProperty("User-Agent", "CineStreamPlayer/1.0")
+        connection.setRequestProperty(
+            "User-Agent",
+            "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+        )
         connection.connect()
 
         if (connection.responseCode in 200..299) {
