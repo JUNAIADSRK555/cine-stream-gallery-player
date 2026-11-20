@@ -1,0 +1,15 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Cyan glow outer ring -->
+    <path
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="3"
+        android:pathData="M54,24 A30,30 0 1,1 53.9,24 Z" />
+    <!-- Cyan Play triangle -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M46,38 L72,54 L46,70 Z" />
+</vector>

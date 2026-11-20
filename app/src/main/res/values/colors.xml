@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark Navy (#0B1220) and Cyan (#00E5FF) Theme -->
+    <color name="background_navy">#0B1220</color>
+    <color name="surface_navy">#111C30</color>
+    <color name="surface_card">#182742</color>
+    <color name="cyan_accent">#00E5FF</color>
+    <color name="cyan_dark">#00B4D8</color>
+    <color name="cyan_glow">#3300E5FF</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#94A3B8</color>
+    <color name="border_subtle">#1E293B</color>
+</resources>
