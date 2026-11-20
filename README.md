@@ -1,9 +1,10 @@
-# CineStream Gallery Player 🎬
+# JD Video Player HD 🎬
 
-> A premium Media3 ExoPlayer client built with **Kotlin** and **Jetpack Compose** for **Android & Android TV**, featuring a modern **Dark Navy (`#0B1220`)** and **Cyan (`#00E5FF`)** UI.
+> A high-performance Media3 ExoPlayer client built with **Kotlin** and **Jetpack Compose** for **Android & Android TV**, featuring an immersive fullscreen UI in **Dark Navy (`#0B1220`)** and **Cyan (`#00E5FF`)**.
 
-[![Download APK](https://img.shields.io/badge/Download_APK-CinePlayer--v1.0.0.apk-00E5FF?style=for-the-badge&logo=android)](https://github.com/JUNAIADSRK555/cine-stream-gallery-player/releases/download/v1.0.0/CinePlayer-v1.0.0.apk)
-[![Release](https://img.shields.io/badge/Release-v1.0.0-success?style=for-the-badge)](https://github.com/JUNAIADSRK555/cine-stream-gallery-player/releases/tag/v1.0.0)
+[![Download APK](https://img.shields.io/badge/Download_APK-JD--Video--Player--HD.apk-00E5FF?style=for-the-badge&logo=android)](https://github.com/JUNAIADSRK555/cine-stream-gallery-player/releases/download/v1.1.0/JD-Video-Player-HD.apk)
+[![Direct Raw Download](https://img.shields.io/badge/Direct_Download-JD--Video--Player--HD.apk-success?style=for-the-badge&logo=github)](https://github.com/JUNAIADSRK555/cine-stream-gallery-player/raw/main/JD-Video-Player-HD.apk)
+[![Release](https://img.shields.io/badge/Release-v1.1.0-blue?style=for-the-badge)](https://github.com/JUNAIADSRK555/cine-stream-gallery-player/releases/tag/v1.1.0)
 ![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20Android%20TV-00E5FF?style=for-the-badge&logo=android)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-purple?style=for-the-badge&logo=kotlin)
 ![Media3](https://img.shields.io/badge/Media3%20ExoPlayer-1.4.1-blue?style=for-the-badge)

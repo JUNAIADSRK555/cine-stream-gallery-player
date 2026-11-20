@@ -39,6 +39,10 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+        val insetsController = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+        insetsController.hide(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+        insetsController.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         setContent {
             CineStreamTheme {
                 Surface(
@@ -95,27 +99,41 @@ fun CinePlayerApp() {
                             .fillMaxWidth()
                             .background(NavyCard)
                             .padding(24.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "Cine ",
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            androidx.compose.foundation.Image(
+                                painter = androidx.compose.ui.res.painterResource(id = R.drawable.app_logo),
+                                contentDescription = "JD Logo",
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .clip(RoundedCornerShape(10.dp))
                             )
-                            Text(
-                                text = "Player",
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = CyanAccent
-                            )
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "JD ",
+                                        fontSize = 22.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = CyanAccent
+                                    )
+                                    Text(
+                                        text = "Player",
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary
+                                    )
+                                }
+                                Text(
+                                    text = "HD Video Player",
+                                    fontSize = 12.sp,
+                                    color = TextSecondary
+                                )
+                            }
                         }
-                        Text(
-                            text = "Next-Gen Media & Stream Player",
-                            fontSize = 12.sp,
-                            color = TextSecondary
-                        )
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))

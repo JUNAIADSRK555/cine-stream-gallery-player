@@ -81,20 +81,32 @@ fun CineTopBar(
                     )
                 }
 
-                // Title: "Cine Player"
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Cine ",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
+                // Logo + Title: "JD Video Player HD"
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    androidx.compose.foundation.Image(
+                        painter = androidx.compose.ui.res.painterResource(id = com.cinestream.galleryplayer.R.drawable.app_logo),
+                        contentDescription = "JD Logo",
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(RoundedCornerShape(8.dp))
                     )
-                    Text(
-                        text = "Player",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = CyanAccent
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "JD ",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = CyanAccent
+                        )
+                        Text(
+                            text = "Video Player HD",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                    }
                 }
             }
 
